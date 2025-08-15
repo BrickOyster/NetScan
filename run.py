@@ -1,7 +1,7 @@
 import os, argparse, csv
 
 from dotenv import load_dotenv
-from vendors import vt_scan_url, vt_get_url_analysis, ai_get_url_report
+from vendors import vt_scan_url, vt_get_url_analysis, ai_get_url_report, gn_get_url_report
 from time import sleep
 from datetime import datetime
 
@@ -46,10 +46,14 @@ def main(args):
             writer = csv.writer(report_file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
             writer.writerow(['Date','Domain','IP','Port','label','prob','total_votes','report', 'vt_response', 'ai_response', 'cs_response', 'gn_response'])
             wr = 0
+            print(f'\r--.--.--.--:--- - Wasted reqs: {wr}.', end='       ')
             for row in reader:
                 Date, Domain, IP, Port = row[:4]
                 label, prob = row[-2:]
 
+                if label != 'malicious':
+                    continue
+                
                 report = {}
                 total_votes = {}
 
@@ -61,7 +65,8 @@ def main(args):
                     vt_response, request_num = vt_get_url_analysis(analysis_id, key_in_use["VIRUSTOTAL"]) 
                     
                     wr += ( request_num - 1 )
-                    key_limit["VIRUSTOTAL"] -= ( request_num + 1 )
+                    if key_limit["VIRUSTOTAL"]:
+                        key_limit["VIRUSTOTAL"] -= ( request_num + 1 )
                     # Process results
                     report.update(vt_response['attributes']['results'])
                     for key, value in vt_response['attributes']['stats'].items():
@@ -73,7 +78,8 @@ def main(args):
                 if key_in_use["ABUSEIPDB"]:
                     ai_response = ai_get_url_report(f'{IP}:{Port}', key_in_use["ABUSEIPDB"])
 
-                    key_limit["ABUSEIPDB"] -= 1
+                    if key_limit["ABUSEIPDB"]:
+                        key_limit["ABUSEIPDB"] -= 1
                     # Process results
                     if ai_response["abuseConfidenceScore"] > 50:
                         report["AbuseIPDB"] = {'category': 'malicious'}
@@ -89,6 +95,24 @@ def main(args):
                 if key_limit["GRAYNOISE"] == 0:
                     get_next_key("GRAYNOISE")
                 gn_response = {}
+                if key_in_use["GRAYNOISE"]:
+                    gn_response = gn_get_url_report(f'{IP}:{Port}', key_in_use["GRAYNOISE"])
+
+                    if key_limit["GRAYNOISE"]:
+                        key_limit["GRAYNOISE"] -= 1
+                    # Process results
+                    if "classification" not in gn_response:
+                        report["GrayNoise"] = {'category': 'undetected'}
+                        total_votes["undetected"] = total_votes.get("undetected", 0) + 1
+                    elif gn_response["classification"] == 'benign':
+                        report["GrayNoise"] = {'category': 'harmless'}
+                        total_votes["harmless"] = total_votes.get("harmless", 0) + 1
+                    elif gn_response["classification"] == 'unknown':
+                        report["GrayNoise"] = {'category': 'undetected'}
+                        total_votes["undetected"] = total_votes.get("undetected", 0) + 1
+                    else:
+                        report["GrayNoise"] = {'category': gn_response["classification"]}
+                        total_votes[gn_response["classification"]] = total_votes.get(gn_response["classification"], 0) + 1
 
                 writer.writerow([Date, Domain, IP, Port, label, prob, total_votes, report, vt_response, ai_response, cs_response, gn_response])
                 print(f'\r{IP}:{Port} - Wasted reqs: {wr}.', end='       ')

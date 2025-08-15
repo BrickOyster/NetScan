@@ -93,3 +93,27 @@ def ai_get_url_report(url, apikey):
         return decodedResponse["data"]
     except Exception as e:
         print(f"An error occurred for {url}: {e}")
+
+
+def gn_get_url_report(url, apikey):
+    """
+    Fetches the URL report from GrayNoise.
+    request: https://docs.greynoise.io/reference/v3ip
+    """
+    try:
+        try:
+            url_ip = url.split(':')[0]
+            ipaddress.ip_address(url_ip)
+        except ValueError:
+            url_ip = socket.gethostbyname(url) if not url.startswith('http') else socket.gethostbyname(url.split('//')[1])
+
+        headers = {
+            "accept": "application/json",
+            "key": apikey
+        }
+
+        response = requests.get(f'https://api.greynoise.io/v3/community/{url_ip}', headers=headers)
+
+        return response.json()
+    except Exception as e:
+        print(f"An error occurred for {url}: {e}")
