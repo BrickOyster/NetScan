@@ -7,6 +7,7 @@ from vendors import (
     vt_scan_url,
     vt_get_url_analysis,
     ai_get_url_report,
+    cs_get_url_report,
 )
 
 # Loading API keys from environment variables
@@ -47,12 +48,10 @@ def get_next_key(service):
             limit = int(limit)
         else:
             seckey, limit = key_tuple, None
-        if "||" in seckey:
-            key, secret = seckey.split("||")
-        else:
-            key, secret = seckey, None
         key_limit[service] = limit
-        key_in_use[service] = key
+        key_in_use[service] = seckey
+
+    print(f"Next key for {service}: {key_in_use[service]}")
 
 
 def check_keys():
@@ -64,16 +63,28 @@ def check_keys():
         get_next_key("CENSYS")
 
 
-async def worker(name, queue, session, writer, lock):
+async def worker(name, queue, session, writer, lock, args):
     """Consumes IPs from queue, processes them, and writes results to CSV"""
     while True:
-        ip = await queue.get()
-        if ip is None:  # Sentinel to stop worker
+        ip_port = await queue.get()
+        if ip_port is None:  # Sentinel to stop worker
             # print(f"Worker {name} exiting.")
             queue.task_done()
             break
+        ip, port = ip_port.split(":")
 
-        # Prossess the IP
+        async with lock:  # make sure only one worker writes at a time
+            if key_limit["VIRUSTOTAL"]:
+                key_limit["VIRUSTOTAL"] -= 1
+            if key_limit["ABUSEIPDB"]:
+                key_limit["ABUSEIPDB"] -= 1
+            if key_limit["CENSYS"]:
+                key_limit["CENSYS"] -= 1
+
+            check_keys()
+
+        # -----------------------------------------------------------------------------
+        # Process the IP
         total_votes, report = {}, {}
         vt_response = {}
         if key_in_use["VIRUSTOTAL"]:
@@ -83,9 +94,12 @@ async def worker(name, queue, session, writer, lock):
             )
 
             # Process results
-            report.update(vt_response["attributes"]["results"])
-            for key, value in vt_response["attributes"]["stats"].items():
-                total_votes[key] = total_votes.get(key, 0) + value
+            try:
+                report.update(vt_response["attributes"]["results"])
+                for key, value in vt_response["attributes"]["stats"].items():
+                    total_votes[key] = total_votes.get(key, 0) + value
+            except Exception as e:
+                vt_response = {}
 
         ai_response = {}
         if key_in_use["ABUSEIPDB"]:
@@ -94,28 +108,42 @@ async def worker(name, queue, session, writer, lock):
             )
 
             # Process results
-            if ai_response["abuseConfidenceScore"] > 20:
-                report["AbuseIPDB"] = {"category": "malicious"}
-                total_votes["malicious"] = total_votes.get("malicious", 0) + 1
-            else:
-                report["AbuseIPDB"] = {"category": "harmless"}
-                total_votes["harmless"] = total_votes.get("harmless", 0) + 1
+            try:
+                if ai_response["abuseConfidenceScore"] > 20:
+                    report["AbuseIPDB"] = {"category": "malicious"}
+                    total_votes["malicious"] = total_votes.get("malicious", 0) + 1
+                else:
+                    report["AbuseIPDB"] = {"category": "harmless"}
+                    total_votes["harmless"] = total_votes.get("harmless", 0) + 1
+            except Exception as e:
+                ai_response = {}
 
         cs_response = {}
         if key_in_use["CENSYS"]:
-            pass
+            cs_response = await cs_get_url_report(
+                session, f"{ip}", *key_in_use["CENSYS"].split("||")
+            )
 
+            try:
+                if (
+                    "labels" in cs_response["result"]
+                    and "c2" in cs_response["result"]["labels"]
+                ):
+                    report["Censys"] = {"category": "malicious"}
+                    total_votes["malicious"] = total_votes.get("malicious", 0) + 1
+                else:
+                    report["Censys"] = {"category": "harmless"}
+                    total_votes["harmless"] = total_votes.get("harmless", 0) + 1
+            except Exception as e:
+                cs_response = {}
+
+        # -----------------------------------------------------------------------------
         # Write results row by row
         async with lock:  # make sure only one worker writes at a time
-            if key_limit["VIRUSTOTAL"]:
-                key_limit["VIRUSTOTAL"] -= 1
-            if key_limit["ABUSEIPDB"]:
-                key_limit["ABUSEIPDB"] -= 1
-
-            check_keys()
             writer.writerow(
                 {
                     "IP": ip,
+                    "Port": port,
                     "total_votes": total_votes,
                     "report": report,
                     "vt_response": vt_response,
@@ -126,6 +154,7 @@ async def worker(name, queue, session, writer, lock):
 
         # print(f"Worker {name} finished {ip}")
         queue.task_done()
+        await asyncio.sleep(40)
 
 
 async def main(args):
@@ -140,6 +169,7 @@ async def main(args):
         for idx, file in enumerate(args.files):
             queue = asyncio.Queue(maxsize=args.queue_size)  # buffer size
             lock = asyncio.Lock()
+
             date = datetime.now().strftime("%Y-%m-%d_%H:%M:%S")
             OUTPUT_FILE = f"{file.removesuffix('.csv')}/report_{date}.csv"
             if not os.path.exists(file.removesuffix(".csv")):
@@ -148,6 +178,7 @@ async def main(args):
             with open(OUTPUT_FILE, "w", newline="", encoding="utf-8") as out_f:
                 fieldnames = [
                     "IP",
+                    "Port",
                     "total_votes",
                     "report",
                     "vt_response",
@@ -159,29 +190,32 @@ async def main(args):
 
                 # Start 15 workers
                 workers = [
-                    asyncio.create_task(worker(i, queue, session, writer, lock))
+                    asyncio.create_task(worker(i, queue, session, writer, lock, args))
                     for i in range(args.workers)
                 ]
 
                 # Producer: read input CSV line by line
                 with open(file, newline="") as in_f:
+                    matched_count = 0
                     reader = csv.DictReader(in_f)
                     for row_idx, row in enumerate(reader):
                         ip = row["IP"]
+                        port = row["Port"]
                         label = row["label"]
                         print(
-                            f"\rPassed {row_idx} items so far... ({ip})",
+                            f"\rPassed {row_idx+1} items so far ({matched_count} malicious)...        ",
                             end="    ",
                         )
                         if label.lower() != "benign":
-                            await queue.put(ip)
+                            matched_count += 1
+                            await queue.put(f"{ip}:{port}")
 
-                # Send sentinel to stop workers
-                for _ in workers:
-                    await queue.put(None)
+                    # Send sentinel to stop workers
+                    for _ in workers:
+                        await queue.put(None)
 
-                await queue.join()
-                await asyncio.gather(*workers)
+                    await queue.join()
+                    await asyncio.gather(*workers)
 
             elapsed = time.time() - start_time
             avg_time = elapsed / (idx + 1)
@@ -201,15 +235,15 @@ if __name__ == "__main__":
         "-w",
         "--workers",
         type=int,
-        default=20,
-        help="Number of concurrent workers (default: 20)",
+        default=4,
+        help="Number of concurrent workers (default: 4) to increase a paid API key is required",
     )
     parser.add_argument(
         "-q",
         "--queue_size",
         type=int,
-        default=30,
-        help="Size of the queue buffer (default: 30)",
+        default=20,
+        help="Size of the queue buffer (default: 20)",
     )
     args = parser.parse_args()
 
