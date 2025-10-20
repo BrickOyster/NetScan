@@ -12,16 +12,32 @@ from vendors import (
 
 # Loading API keys from environment variables
 load_dotenv()
+# Define services
+# For extra services:
+# 1. Add service name to services list
+# 2. Define environment variable in .env file for key||secret::rate_limit
+# 3. Create corresponding functions in vendors.py
+# 4. Add processing logic in worker() function
+services = ["VIRUSTOTAL", "ABUSEIPDB", "CENSYS", "THREATFOX"]
 KEYS = {
-    "VIRUSTOTAL": os.getenv("VIRUSTOTAL").split(","),
-    "ABUSEIPDB": os.getenv("ABUSEIPDB").split(","),
-    "CENSYS": os.getenv("CENSYS").split(","),
+    service: (
+        os.getenv(service).split(",")
+        if os.getenv(service) not in [None, "None"]
+        else []
+    )
+    for service in services
 }
-key_num = {
-    service: 0
-    for service in KEYS
-    if KEYS[service] is not None and KEYS[service] != "None"
-}
+
+# Convert lists to queues
+for service in KEYS:
+    if KEYS[service]:
+        queue = asyncio.Queue()
+        for key in KEYS[service]:
+            queue.put_nowait(key)
+        KEYS[service] = queue
+    else:
+        KEYS[service] = asyncio.Queue()
+
 key_limit = {
     service: 0
     for service in KEYS
@@ -35,32 +51,22 @@ key_in_use = {
 
 
 def get_next_key(service):
-    global key_num, key_limit, key_in_use
-    if len(KEYS[service]) == key_num[service]:
+    global key_limit, key_in_use
+    if not KEYS[service].empty():
+        key, limit = KEYS[service].get_nowait().split("::")
+        key_in_use[service] = key
+        key_limit[service] = int(limit)
+        print(
+            f"Next key for {service}: {key_in_use[service]}, Key limit: {key_limit[service]}"
+        )
+    else:
         key_in_use[service] = None
         key_limit[service] = None
-
-    if service in KEYS:
-        key_tuple = KEYS[service][key_num[service]]
-        key_num[service] += 1
-        if "::" in key_tuple:
-            seckey, limit = key_tuple.split("::")
-            limit = int(limit)
-        else:
-            seckey, limit = key_tuple, None
-        key_limit[service] = limit
-        key_in_use[service] = seckey
-
-    print(f"Next key for {service}: {key_in_use[service]}")
+        print(f"{service} has no more API keys available.")
 
 
 def check_keys():
-    if key_limit["VIRUSTOTAL"] == 0:
-        get_next_key("VIRUSTOTAL")
-    if key_limit["ABUSEIPDB"] == 0:
-        get_next_key("ABUSEIPDB")
-    if key_limit["CENSYS"] == 0:
-        get_next_key("CENSYS")
+    [get_next_key(service) for service in KEYS if key_limit[service] == 0]
 
 
 async def worker(name, queue, session, writer, lock, args):
@@ -74,13 +80,8 @@ async def worker(name, queue, session, writer, lock, args):
         ip, port = ip_port.split(":")
 
         async with lock:  # make sure only one worker writes at a time
-            if key_limit["VIRUSTOTAL"]:
-                key_limit["VIRUSTOTAL"] -= 1
-            if key_limit["ABUSEIPDB"]:
-                key_limit["ABUSEIPDB"] -= 1
-            if key_limit["CENSYS"]:
-                key_limit["CENSYS"] -= 1
-
+            for service in KEYS:
+                key_limit[service] -= 1 if key_limit[service] else 0
             check_keys()
 
         # -----------------------------------------------------------------------------
@@ -207,8 +208,8 @@ async def main(args):
                             end="    ",
                         )
                         if label.lower() != "benign":
-                            matched_count += 1
                             await queue.put(f"{ip}:{port}")
+                            matched_count += 1
 
                     # Send sentinel to stop workers
                     for _ in workers:
