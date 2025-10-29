@@ -3,11 +3,12 @@ import vt
 from time import sleep
 
 
-async def vt_scan_url(session, url, apikey):
+async def vt_scan_url(session, search_term, apikey):
     """
     Submits a URL for scanning on VirusTotal.
     request: https://docs.virustotal.com/reference/url
     """
+    url, port = search_term.split(":")
     try:
         payload = {"url": url}
         headers = {
@@ -19,9 +20,10 @@ async def vt_scan_url(session, url, apikey):
             "https://www.virustotal.com/api/v3/urls", headers=headers, data=payload
         ) as resp:
             data = await resp.json()
-            return data["data"]["id"]
+            return await vt_get_url_analysis(session, data["data"]["id"], apikey)
     except Exception as e:
-        print(f"An error occurred for vt_url {url}: {e}")
+        print(f"\nAn error occurred for vt_url {search_term}: {e}")
+        return {}
 
 
 async def vt_get_url_analysis(session, id, apikey):
@@ -44,14 +46,26 @@ async def vt_get_url_analysis(session, id, apikey):
             request_num += 1
         return response
     except Exception as e:
-        print(f"An error occurred for vt_id {id}: {e}")
+        print(f"\nAn error occurred for vt_id {id}: {e}")
 
 
-async def ai_get_url_report(session, url, apikey):
+async def process_vt_report(vt_response, total_votes, report):
+    try:
+        report.update(vt_response["attributes"]["results"])
+        for key, value in vt_response["attributes"]["stats"].items():
+            total_votes[key] = total_votes.get(key, 0) + value
+    except Exception as e:
+        pass
+    finally:
+        return total_votes, report
+
+
+async def ai_get_url_report(session, search_term, apikey):
     """
     Fetches the URL report from AbuseIPDB.
     request: https://docs.abuseipdb.com/?python#check-endpoint
     """
+    url, port = search_term.split(":")
     try:
         querystring = {"ipAddress": url, "maxAgeInDays": "30"}
         headers = {"Accept": "application/json", "Key": apikey}
@@ -63,14 +77,33 @@ async def ai_get_url_report(session, url, apikey):
             decodedResponse = await resp.json()
             return decodedResponse["data"]
     except Exception as e:
-        print(f"An error occurred for ai_url {url}: {e}")
+        print(f"\nAn error occurred for ai_url {search_term}: {e}")
+        return {}
 
 
-async def cs_get_url_report(session, url, apikey, secret):
+async def process_ai_report(ai_response, total_votes, report):
+    try:
+        if ai_response["abuseConfidenceScore"] > 25:
+            report["AbuseIPDB"] = {"category": "malicious"}
+            total_votes["malicious"] = total_votes.get("malicious", 0) + 1
+        elif ai_response["abuseConfidenceScore"] > 15:
+            report["AbuseIPDB"] = {"category": "suspicious"}
+            total_votes["suspicious"] = total_votes.get("suspicious", 0) + 1
+        else:
+            report["AbuseIPDB"] = {"category": "harmless"}
+            total_votes["harmless"] = total_votes.get("harmless", 0) + 1
+    except Exception as e:
+        pass
+    finally:
+        return total_votes, report
+
+
+async def cs_get_url_report(session, search_term, apikey, secret):
     """
     Fetches the URL report from Censys.
     request: https://
     """
+    url, port = search_term.split(":")
     try:
         headers = {"Accept": "application/json"}
         auth = aiohttp.BasicAuth(apikey, secret)
@@ -81,4 +114,63 @@ async def cs_get_url_report(session, url, apikey, secret):
         ) as resp:
             return await resp.json()
     except Exception as e:
-        print(f"An error occurred for cs_url {url}: {e}")
+        print(f"\nAn error occurred for cs_url {search_term}: {e}")
+        return {}
+
+
+async def process_cs_report(cs_response, total_votes, report):
+    try:
+        if (
+            "labels" in cs_response["result"]
+            and "c2" in cs_response["result"]["labels"]
+        ):
+            report["Censys"] = {"category": "malicious"}
+            total_votes["malicious"] = total_votes.get("malicious", 0) + 1
+        else:
+            report["Censys"] = {"category": "harmless"}
+            total_votes["harmless"] = total_votes.get("harmless", 0) + 1
+    except Exception as e:
+        pass
+    finally:
+        return total_votes, report
+
+
+async def tf_search_ioc(session, search_term, apikey):
+    """
+    Searches ThreatFox (abuse.ch) for an IOC.
+    request: https://threatfox-api.abuse.ch/api/v1/
+    """
+    try:
+        headers = {
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+            "Auth-Key": apikey,
+        }
+        payload = {
+            "query": "search_ioc",
+            "search_term": search_term,
+            "exact_match": "true",
+        }
+        async with session.post(
+            "https://threatfox-api.abuse.ch/api/v1/",
+            headers=headers,
+            json=payload,
+        ) as resp:
+            return await resp.json()
+    except Exception as e:
+        print(f"\nAn error occurred for tf_search {search_term}: {e}")
+        return {}
+
+
+async def process_tf_report(tf_response, total_votes, report):
+    try:
+        if tf_response["data"]:
+            report["ThreatFox"] = {"category": "malicious"}
+            total_votes["malicious"] = total_votes.get("malicious", 0) + 1
+        else:
+            report["ThreatFox"] = {"category": "harmless"}
+            total_votes["harmless"] = total_votes.get("harmless", 0) + 1
+    except Exception as e:
+        pass
+    finally:
+        return total_votes, report

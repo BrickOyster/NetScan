@@ -3,22 +3,36 @@ import os, argparse, csv, json, asyncio, aiohttp
 from dotenv import load_dotenv
 from datetime import datetime
 import time
-from vendors import (
-    vt_scan_url,
-    vt_get_url_analysis,
-    ai_get_url_report,
-    cs_get_url_report,
-)
+from vendors import *
 
 # Loading API keys from environment variables
 load_dotenv()
-# Define services
+
+# ------------------- Service Configuration -------------------
 # For extra services:
-# 1. Add service name to services list
-# 2. Define environment variable in .env file for key||secret::rate_limit
-# 3. Create corresponding functions in vendors.py
-# 4. Add processing logic in worker() function
-services = ["VIRUSTOTAL", "ABUSEIPDB", "CENSYS", "THREATFOX"]
+# 1. Define environment variable in .env file for key||secret::rate_limit
+# 2. Create corresponding functions in vendors.py
+# 3. Add service info in the dicts below
+services = {
+    "VIRUSTOTAL": "vt",
+    "ABUSEIPDB": "ai",
+    "CENSYS": "cs",
+    "THREATFOX": "tf",
+}  # Service name : abbreviation
+fetch_from_service = {
+    "VIRUSTOTAL": vt_scan_url,
+    "ABUSEIPDB": ai_get_url_report,
+    "CENSYS": cs_get_url_report,
+    "THREATFOX": tf_search_ioc,
+}  # Service name : function to fetch report
+process_service_report = {
+    "VIRUSTOTAL": process_vt_report,
+    "ABUSEIPDB": process_ai_report,
+    "CENSYS": process_cs_report,
+    "THREATFOX": process_tf_report,
+}  # Service name : function to process report
+# -------------------------------------------------------------
+
 KEYS = {
     service: (
         os.getenv(service).split(",")
@@ -74,7 +88,6 @@ async def worker(name, queue, session, writer, lock, args):
     while True:
         ip_port = await queue.get()
         if ip_port is None:  # Sentinel to stop worker
-            # print(f"Worker {name} exiting.")
             queue.task_done()
             break
         ip, port = ip_port.split(":")
@@ -84,78 +97,36 @@ async def worker(name, queue, session, writer, lock, args):
                 key_limit[service] -= 1 if key_limit[service] else 0
             check_keys()
 
-        # -----------------------------------------------------------------------------
         # Process the IP
-        total_votes, report = {}, {}
-        vt_response = {}
-        if key_in_use["VIRUSTOTAL"]:
-            analysis_id = await vt_scan_url(session, f"{ip}", key_in_use["VIRUSTOTAL"])
-            vt_response = await vt_get_url_analysis(
-                session, analysis_id, key_in_use["VIRUSTOTAL"]
+        total_votes = {}
+        report = {}
+        responses = {}
+
+        for service in services:
+            if not key_in_use[service]:
+                responses[f"{services[service]}_response"] = {}
+                continue
+            responses[f"{services[service]}_response"] = await fetch_from_service[
+                service
+            ](session, f"{ip_port}", *key_in_use[service].split("||"))
+            total_votes, report = await process_service_report[service](
+                responses[f"{services[service]}_response"], total_votes, report
             )
 
-            # Process results
-            try:
-                report.update(vt_response["attributes"]["results"])
-                for key, value in vt_response["attributes"]["stats"].items():
-                    total_votes[key] = total_votes.get(key, 0) + value
-            except Exception as e:
-                vt_response = {}
-
-        ai_response = {}
-        if key_in_use["ABUSEIPDB"]:
-            ai_response = await ai_get_url_report(
-                session, f"{ip}", key_in_use["ABUSEIPDB"]
-            )
-
-            # Process results
-            try:
-                if ai_response["abuseConfidenceScore"] > 20:
-                    report["AbuseIPDB"] = {"category": "malicious"}
-                    total_votes["malicious"] = total_votes.get("malicious", 0) + 1
-                else:
-                    report["AbuseIPDB"] = {"category": "harmless"}
-                    total_votes["harmless"] = total_votes.get("harmless", 0) + 1
-            except Exception as e:
-                ai_response = {}
-
-        cs_response = {}
-        if key_in_use["CENSYS"]:
-            cs_response = await cs_get_url_report(
-                session, f"{ip}", *key_in_use["CENSYS"].split("||")
-            )
-
-            try:
-                if (
-                    "labels" in cs_response["result"]
-                    and "c2" in cs_response["result"]["labels"]
-                ):
-                    report["Censys"] = {"category": "malicious"}
-                    total_votes["malicious"] = total_votes.get("malicious", 0) + 1
-                else:
-                    report["Censys"] = {"category": "harmless"}
-                    total_votes["harmless"] = total_votes.get("harmless", 0) + 1
-            except Exception as e:
-                cs_response = {}
-
-        # -----------------------------------------------------------------------------
         # Write results row by row
         async with lock:  # make sure only one worker writes at a time
-            writer.writerow(
-                {
-                    "IP": ip,
-                    "Port": port,
-                    "total_votes": total_votes,
-                    "report": report,
-                    "vt_response": vt_response,
-                    "ai_response": ai_response,
-                    "cs_response": cs_response,
-                }
-            )
+            to_write = {
+                "IP": ip,
+                "Port": port,
+                "total_votes": total_votes,
+                "report": report,
+            }
+            to_write.update(responses)
 
-        # print(f"Worker {name} finished {ip}")
+            writer.writerow(to_write)
+
         queue.task_done()
-        await asyncio.sleep(40)
+        await asyncio.sleep(41)
 
 
 async def main(args):
@@ -182,10 +153,9 @@ async def main(args):
                     "Port",
                     "total_votes",
                     "report",
-                    "vt_response",
-                    "ai_response",
-                    "cs_response",
                 ]
+                for service in services:
+                    fieldnames.append(f"{services[service]}_response")
                 writer = csv.DictWriter(out_f, fieldnames=fieldnames)
                 writer.writeheader()
 
@@ -222,9 +192,9 @@ async def main(args):
             avg_time = elapsed / (idx + 1)
             remaining = avg_time * (file_num - idx - 1)
             print(
-                f"\nReport for file {idx + 1}/{file_num} has been generated. Estimated time remaining: {remaining:.1f}s"
+                f"\nReport for file {idx + 1}/{file_num} has been generated. Estimated time remaining: {remaining/60:.1f}m."
             )
-        print(f"\nAll reports generated in {elapsed:.1f}s.")
+        print(f"\nAll reports generated in {elapsed/60:.1f}m.")
 
 
 if __name__ == "__main__":
@@ -236,7 +206,7 @@ if __name__ == "__main__":
         "-w",
         "--workers",
         type=int,
-        default=4,
+        default=2,
         help="Number of concurrent workers (default: 4) to increase a paid API key is required",
     )
     parser.add_argument(
