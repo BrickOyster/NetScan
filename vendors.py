@@ -35,15 +35,15 @@ async def vt_get_url_analysis(session, id, apikey):
     response = {"attributes": {"status": "not_completed"}}
     try:
         headers = {"accept": "application/json", "x-apikey": apikey}
-        await asyncio.sleep(20)
+        await asyncio.sleep(30)
         while response["attributes"]["status"] != "completed":
-            await asyncio.sleep(5 * request_num)
             async with session.get(
                 f"https://www.virustotal.com/api/v3/analyses/{id}", headers=headers
             ) as resp:
                 data = await resp.json()
                 response = data["data"]
             request_num += 1
+            await asyncio.sleep(30)
         return response
     except Exception as e:
         print(f"\nAn error occurred for vt_id {id}: {e}")
@@ -55,7 +55,9 @@ async def process_vt_report(vt_response, total_votes, report):
         for key, value in vt_response["attributes"]["stats"].items():
             total_votes[key] = total_votes.get(key, 0) + value
     except Exception as e:
-        pass
+        print(
+            f"\nAn error occurred while processing VirusTotal report: {e}\n{vt_response}"
+        )
     finally:
         return total_votes, report
 
@@ -93,7 +95,9 @@ async def process_ai_report(ai_response, total_votes, report):
             report["AbuseIPDB"] = {"category": "harmless"}
             total_votes["harmless"] = total_votes.get("harmless", 0) + 1
     except Exception as e:
-        pass
+        print(
+            f"\nAn error occurred while processing AbuseIPDB report: {e}\n{ai_response}"
+        )
     finally:
         return total_votes, report
 
@@ -130,7 +134,7 @@ async def process_cs_report(cs_response, total_votes, report):
             report["Censys"] = {"category": "harmless"}
             total_votes["harmless"] = total_votes.get("harmless", 0) + 1
     except Exception as e:
-        pass
+        print(f"\nAn error occurred while processing Censys report: {e}\n{cs_response}")
     finally:
         return total_votes, report
 
@@ -164,13 +168,15 @@ async def tf_search_ioc(session, search_term, apikey):
 
 async def process_tf_report(tf_response, total_votes, report):
     try:
-        if tf_response["data"]:
-            report["ThreatFox"] = {"category": "malicious"}
-            total_votes["malicious"] = total_votes.get("malicious", 0) + 1
-        else:
+        if tf_response["query_status"] == "no_result":
             report["ThreatFox"] = {"category": "harmless"}
             total_votes["harmless"] = total_votes.get("harmless", 0) + 1
+        else:
+            report["ThreatFox"] = {"category": "malicious"}
+            total_votes["malicious"] = total_votes.get("malicious", 0) + 1
     except Exception as e:
-        pass
+        print(
+            f"\nAn error occurred while processing ThreatFox report: {e}\n{tf_response}"
+        )
     finally:
         return total_votes, report
