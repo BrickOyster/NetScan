@@ -3,12 +3,22 @@ import vt
 from time import sleep
 
 
+async def check_connection():
+    try:
+        # Attempt to connect to a well-known host (Google's public DNS)
+        socket.create_connection(("8.8.8.8", 53), timeout=5)
+        return True
+    except Exception as e:
+        return False
+
+
 async def vt_scan_url(session, search_term, apikey):
     """
     Submits a URL for scanning on VirusTotal.
     request: https://docs.virustotal.com/reference/url
     """
     url, port = search_term.split(":")
+    testing = ""
     try:
         payload = {"url": url}
         headers = {
@@ -19,10 +29,18 @@ async def vt_scan_url(session, search_term, apikey):
         async with session.post(
             "https://www.virustotal.com/api/v3/urls", headers=headers, data=payload
         ) as resp:
+            testing = await resp.text()
             data = await resp.json()
             return await vt_get_url_analysis(session, data["data"]["id"], apikey)
     except Exception as e:
-        print(f"\nAn error occurred for vt_url {search_term}: {e}")
+        print(f"\nAn error occurred for vt_url {search_term}: \n{e} \n{testing}")
+        if f"{e}".startswith("Cannot connect to host"):
+            print("Lost connection")
+            while not await check_connection():
+                await asyncio.sleep(5)
+            print("Connection restored")
+            await asyncio.sleep(5)
+            return await vt_scan_url(session, search_term, apikey)
         return {}
 
 
@@ -35,7 +53,7 @@ async def vt_get_url_analysis(session, id, apikey):
     response = {"attributes": {"status": "not_completed"}}
     try:
         headers = {"accept": "application/json", "x-apikey": apikey}
-        await asyncio.sleep(30)
+        await asyncio.sleep(31)
         while response["attributes"]["status"] != "completed":
             async with session.get(
                 f"https://www.virustotal.com/api/v3/analyses/{id}", headers=headers
@@ -43,7 +61,7 @@ async def vt_get_url_analysis(session, id, apikey):
                 data = await resp.json()
                 response = data["data"]
             request_num += 1
-            await asyncio.sleep(30)
+            await asyncio.sleep(31)
         return response
     except Exception as e:
         print(f"\nAn error occurred for vt_id {id}: {e}")
@@ -68,6 +86,7 @@ async def ai_get_url_report(session, search_term, apikey):
     request: https://docs.abuseipdb.com/?python#check-endpoint
     """
     url, port = search_term.split(":")
+    testing = ""
     try:
         querystring = {"ipAddress": url, "maxAgeInDays": "30"}
         headers = {"Accept": "application/json", "Key": apikey}
@@ -76,10 +95,11 @@ async def ai_get_url_report(session, search_term, apikey):
             headers=headers,
             params=querystring,
         ) as resp:
+            testing = await resp.text()
             decodedResponse = await resp.json()
             return decodedResponse["data"]
     except Exception as e:
-        print(f"\nAn error occurred for ai_url {search_term}: {e}")
+        print(f"\nAn error occurred for ai_url {search_term}: \n{e} \n{testing}")
         return {}
 
 
@@ -108,6 +128,7 @@ async def cs_get_url_report(session, search_term, apikey, secret):
     request: https://
     """
     url, port = search_term.split(":")
+    testing = ""
     try:
         headers = {"Accept": "application/json"}
         auth = aiohttp.BasicAuth(apikey, secret)
@@ -116,9 +137,10 @@ async def cs_get_url_report(session, search_term, apikey, secret):
             headers=headers,
             auth=auth,
         ) as resp:
+            testing = await resp.text()
             return await resp.json()
     except Exception as e:
-        print(f"\nAn error occurred for cs_url {search_term}: {e}")
+        print(f"\nAn error occurred for cs_url {search_term}: \n{e} \n{testing}")
         return {}
 
 
@@ -144,6 +166,7 @@ async def tf_search_ioc(session, search_term, apikey):
     Searches ThreatFox (abuse.ch) for an IOC.
     request: https://threatfox-api.abuse.ch/api/v1/
     """
+    testing = ""
     try:
         headers = {
             "Accept": "application/json",
@@ -160,9 +183,10 @@ async def tf_search_ioc(session, search_term, apikey):
             headers=headers,
             json=payload,
         ) as resp:
+            testing = await resp.text()
             return await resp.json()
     except Exception as e:
-        print(f"\nAn error occurred for tf_search {search_term}: {e}")
+        print(f"\nAn error occurred for tf_search {search_term}: \n{e} \n{testing}")
         return {}
 
 
