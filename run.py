@@ -1,4 +1,4 @@
-import os, argparse, csv, json, asyncio, aiohttp
+import os, argparse, csv, asyncio, aiohttp
 
 from dotenv import load_dotenv
 from datetime import datetime
@@ -207,7 +207,7 @@ if __name__ == "__main__":
         "--workers",
         type=int,
         default=2,
-        help="Number of concurrent workers (default: 4) to increase a paid API key is required",
+        help="Number of concurrent workers (default: 2) to increase a paid API key is required",
     )
     parser.add_argument(
         "-q",

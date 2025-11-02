@@ -1,7 +1,4 @@
-import aiohttp, asyncio, json, socket, ipaddress
-import vt
-from time import sleep
-
+import aiohttp, asyncio, socket
 
 async def check_connection():
     try:
