@@ -53,15 +53,14 @@ async def vt_get_url_analysis(session, id, apikey):
     response = {"attributes": {"status": "not_completed"}}
     try:
         headers = {"accept": "application/json", "x-apikey": apikey}
-        await asyncio.sleep(31)
         while response["attributes"]["status"] != "completed":
+            await asyncio.sleep(31)
             async with session.get(
                 f"https://www.virustotal.com/api/v3/analyses/{id}", headers=headers
             ) as resp:
                 data = await resp.json()
                 response = data["data"]
             request_num += 1
-            await asyncio.sleep(31)
         return response
     except Exception as e:
         print(f"\nAn error occurred for vt_id {id}: {e}")

@@ -126,7 +126,7 @@ async def worker(name, queue, session, writer, lock, args):
             writer.writerow(to_write)
 
         queue.task_done()
-        await asyncio.sleep(41)
+        await asyncio.sleep(31)
 
 
 async def main(args):
