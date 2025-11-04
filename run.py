@@ -137,12 +137,13 @@ async def main(args):
     check_keys()
 
     start_time = time.time()
+    total_matched = 0
     async with aiohttp.ClientSession() as session:
         for idx, file in enumerate(args.files):
             queue = asyncio.Queue(maxsize=args.queue_size)  # buffer size
             lock = asyncio.Lock()
 
-            date = datetime.now().strftime("%Y-%m-%d_%H:%M:%S")
+            date = datetime.now().strftime("%Y-%m-%d_%H_%M_%S")
             OUTPUT_FILE = f"{file.removesuffix('.csv')}/report_{date}.csv"
             if not os.path.exists(file.removesuffix(".csv")):
                 os.mkdir(file.removesuffix(".csv"))
@@ -173,13 +174,14 @@ async def main(args):
                         ip = row["IP"]
                         port = row["Port"]
                         label = row["label"]
-                        print(
-                            f"\rPassed {row_idx+1} items so far ({matched_count} malicious)...        ",
-                            end="    ",
-                        )
                         if label.lower() != "benign":
-                            await queue.put(f"{ip}:{port}")
                             matched_count += 1
+                            print(
+                                f"\rPassed {row_idx+1} items so far ({matched_count} malicious)...        ",
+                                end="    ",
+                            )
+                            await queue.put(f"{ip}:{port}")
+                    total_matched += matched_count
 
                     # Send sentinel to stop workers
                     for _ in workers:
@@ -194,7 +196,7 @@ async def main(args):
             print(
                 f"\nReport for file {idx + 1}/{file_num} has been generated. Estimated time remaining: {remaining/60:.1f}m."
             )
-        print(f"\nAll reports generated in {elapsed/60:.1f}m.")
+        print(f"\nReports with {total_matched} hits generated in {elapsed/60:.1f}m.")
 
 
 if __name__ == "__main__":
@@ -227,5 +229,5 @@ if __name__ == "__main__":
         print(f"No CSV files found in folder {args.folder}.")
         exit(1)
     args.files = files
-
+    
     asyncio.run(main(args))
