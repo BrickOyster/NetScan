@@ -1,4 +1,6 @@
-import aiohttp, asyncio, socket
+import aiohttp, asyncio, socket, requests, re
+WAITING_TIME = 35
+
 
 async def check_connection():
     try:
@@ -8,6 +10,24 @@ async def check_connection():
     except Exception as e:
         return False
 
+
+async def check_vt_quota(apikey):
+    headers = {"x-apikey": apikey,"accept": "application/json"}
+ 
+    quota_url = "https://www.virustotal.com/api/v3/users/"+apikey+"/overall_quotas"
+    quota_resp = {}
+    try:
+        quota_resp = requests.get(quota_url, headers=headers).json()
+        allowed_today = quota_resp["data"]["api_requests_daily"]["user"]["allowed"]
+        used_today = quota_resp["data"]["api_requests_daily"]["user"]["used"]
+        left_today = int(allowed_today) - int(used_today)
+        return left_today
+    except Exception as e:
+        print(f"Error while retrieving quota {e} \n {quota_resp}")
+        if quota_resp.get('error',{}).get('code',"") == "QuotaExceededError":
+            return 0
+        return -1
+    
 
 async def vt_scan_url(session, search_term, apikey):
     """
@@ -30,14 +50,18 @@ async def vt_scan_url(session, search_term, apikey):
             data = await resp.json()
             return await vt_get_url_analysis(session, data["data"]["id"], apikey)
     except Exception as e:
-        print(f"\nAn error occurred for vt_url {search_term}: \n{e} \n{testing}")
+        if testing.find("Too Many Requests") != -1:
+            print("VirusTotal too many requests")
+            await asyncio.sleep(2*WAITING_TIME)
+            return await vt_scan_url(session, search_term, apikey)
         if f"{e}".startswith("Cannot connect to host"):
             print("Lost connection")
             while not await check_connection():
-                await asyncio.sleep(5)
+                await asyncio.sleep(WAITING_TIME)
             print("Connection restored")
-            await asyncio.sleep(5)
+            await asyncio.sleep(WAITING_TIME)
             return await vt_scan_url(session, search_term, apikey)
+        print(f"\nAn error occurred for vt_url {search_term}: \n{e} \n{testing}")
         return {}
 
 
@@ -51,7 +75,7 @@ async def vt_get_url_analysis(session, id, apikey):
     try:
         headers = {"accept": "application/json", "x-apikey": apikey}
         while response["attributes"]["status"] != "completed":
-            await asyncio.sleep(31)
+            await asyncio.sleep(WAITING_TIME)
             async with session.get(
                 f"https://www.virustotal.com/api/v3/analyses/{id}", headers=headers
             ) as resp:
@@ -200,3 +224,68 @@ async def process_tf_report(tf_response, total_votes, report):
         )
     finally:
         return total_votes, report
+
+
+def fetch_cinsscore():
+    """
+    Fetches the list of 'bad guy' IPs from cinsscore.com and returns them as a list of strings.
+    """
+    url = "https://cinsscore.com/list/ci-badguys.txt"
+    try:
+        response = requests.get(url, timeout=10)
+        response.raise_for_status()  # Raise an exception if the request failed
+        
+        # Use regex to extract all valid IPv4 addresses
+        ips = response.text.splitlines()
+        return ips
+    except requests.RequestException as e:
+        print(f"Error fetching IPs: {e}")
+        return []
+    
+
+async def process_cb_report(cb_responce, total_votes, report):
+    if cb_responce:
+        report["Cinsscore"] = {"category": "malicious"}
+        total_votes["malicious"] = total_votes.get("malicious", 0) + 1
+    else:
+        report["Cinsscore"] = {"category": "harmless"}
+        total_votes["harmless"] = total_votes.get("harmless", 0) + 1
+    return total_votes, report
+
+
+def fetch_openphish():
+    """
+    Fetches the list of phishing URLs from OpenPhish and returns them as a list of strings.
+    """
+    url = "https://raw.githubusercontent.com/openphish/public_feed/refs/heads/main/feed.txt"
+    test = ''
+    missed = 0
+    try:
+        response = requests.get(url, timeout=10)
+        response.raise_for_status()  # Raise an exception if the request failed
+        
+        # Split the response text into lines (each line is a URL)
+        urls = response.text.splitlines()
+
+        ips = []
+        for hostname in urls:
+            domain = hostname.split("//")[-1].split("/")[0]
+            try:
+                ip = socket.gethostbyname_ex(domain)[2]
+                ips.extend(ip)
+            except Exception as e:
+                missed += 1
+        return ips, missed
+    except requests.RequestException as e:
+        print(f"Error fetching URLs: {e}")
+        return []
+
+
+async def process_op_report(op_response, total_votes, report):
+    if op_response:
+        report["OpenPhish_pub"] = {"category": "malicious"}
+        total_votes["malicious"] = total_votes.get("malicious", 0) + 1
+    else:
+        report["OpenPhish_pub"] = {"category": "harmless"}
+        total_votes["harmless"] = total_votes.get("harmless", 0) + 1
+    return total_votes, report
