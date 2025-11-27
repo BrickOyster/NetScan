@@ -100,12 +100,13 @@ def check_keys():
 
 
 vt_quota_reached = False
-async def quota_worker(workers):
+async def quota_worker(workers, args):
     global vt_quota_reached
     vt_quota = 1
     while vt_quota != 0:
         vt_quota = await check_vt_quota(key_in_use['VIRUSTOTAL'])
-        print(f"{datetime.now().strftime("%H_%M_%S")} | VT quota = {vt_quota}", flush=True)
+        if args.debug:
+            print(f"{datetime.now().strftime("%H_%M_%S")} | VT quota = {vt_quota}", flush=True)
         await asyncio.sleep(4*WAITING_TIME)
     vt_quota_reached = True
 
@@ -126,7 +127,8 @@ async def worker(name, queue, session, writer, lock, args):
             check_keys()
 
         # Process the IP
-        print(f"{datetime.now().strftime("%H_%M_%S")} | Worker #{name} processing {ip_port}", flush=True)
+        if args.debug:
+            print(f"{datetime.now().strftime("%H_%M_%S")} | Worker #{name} processing {ip_port}", flush=True)
         total_votes = {}
         report = {}
         responses = {}
@@ -193,7 +195,7 @@ async def main(args):
                 # Start workers
                 if not quota_workers:
                     print("Starting quota worker...")
-                    quota_workers = asyncio.create_task(quota_worker(workers))
+                    quota_workers = asyncio.create_task(quota_worker(workers, args))
                 workers = [
                     asyncio.create_task(worker(i, queue, session, writer, lock, args))
                     for i in range(args.workers)
@@ -212,10 +214,6 @@ async def main(args):
                         label = row["label"]
                         if label.lower() != "benign":
                             matched_count += 1
-                            # print(
-                            #     f"\rPassed {row_idx+1} items so far ({matched_count} malicious)...        ",
-                            #     end="    "
-                            # )
                             await queue.put(f"{ip}:{port}")
                     total_matched += matched_count
 
@@ -248,6 +246,10 @@ if __name__ == "__main__":
     parser.add_argument(
         "-q", "--queue_size", type=int, default=4, 
         help="Size of the queue buffer (default: 4)",
+    )
+    parser.add_argument(
+        "-dbg", "--debug", action="store_true", 
+        help="Enable debug level prints",
     )
     args = parser.parse_args()
 
