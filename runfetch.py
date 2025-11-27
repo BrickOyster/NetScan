@@ -100,13 +100,13 @@ def check_keys():
 
 
 vt_quota_reached = False
-async def quota_worker(workers, args):
+async def quota_worker(args):
     global vt_quota_reached
     vt_quota = 1
     while vt_quota != 0:
         vt_quota = await check_vt_quota(key_in_use['VIRUSTOTAL'])
         if args.debug:
-            print(f"{datetime.now().strftime("%H_%M_%S")} | VT quota = {vt_quota}", flush=True)
+            print(f"{datetime.now().time()} | VT quota = {vt_quota}", flush=True)
         await asyncio.sleep(4*WAITING_TIME)
     vt_quota_reached = True
 
@@ -128,7 +128,7 @@ async def worker(name, queue, session, writer, lock, args):
 
         # Process the IP
         if args.debug:
-            print(f"{datetime.now().strftime("%H_%M_%S")} | Worker #{name} processing {ip_port}", flush=True)
+            print(f"{datetime.now().time()} | Worker #{name} processing {ip_port}", flush=True)
         total_votes = {}
         report = {}
         responses = {}
@@ -195,7 +195,7 @@ async def main(args):
                 # Start workers
                 if not quota_workers:
                     print("Starting quota worker...")
-                    quota_workers = asyncio.create_task(quota_worker(workers, args))
+                    quota_workers = asyncio.create_task(quota_worker(args))
                 workers = [
                     asyncio.create_task(worker(i, queue, session, writer, lock, args))
                     for i in range(args.workers)
