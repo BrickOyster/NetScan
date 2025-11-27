@@ -15,7 +15,7 @@ async def cb_search_list(session, search_term, apikey):
 openphish_list, op_missed = fetch_openphish()
 async def op_search_list(session, search_term, apikey): 
     return openphish_list.count(search_term.split(":")[0])
-print(f"Loaded remote lists with {op_missed} missed items.", flush=True)
+print(f"Loaded remote lists with {op_missed} missed items.")
 
 # ------------------- Service Configuration -------------------
 # For extra services:
@@ -92,7 +92,7 @@ def get_next_key(service):
     else:
         key_in_use[service] = None
         key_limit[service] = None
-        print(f"{service} has no more API keys available.", flush=True)
+        print(f"{service} has no more API keys available.")
 
 
 def check_keys():
@@ -103,9 +103,9 @@ vt_quota_reached = False
 async def quota_worker(workers):
     global vt_quota_reached
     vt_quota = 1
-    while vt_quota > 0:
+    while vt_quota != 0:
         vt_quota = await check_vt_quota(key_in_use['VIRUSTOTAL'])
-        print(f"VT quota = {vt_quota}", flush=True)
+        print(f"{datetime.now().strftime("%H_%M_%S")} | VT quota = {vt_quota}", flush=True)
         await asyncio.sleep(4*WAITING_TIME)
     vt_quota_reached = True
 
@@ -126,7 +126,7 @@ async def worker(name, queue, session, writer, lock, args):
             check_keys()
 
         # Process the IP
-        print(f"Worker #{name} processing {ip_port}", flush=True)
+        print(f"{datetime.now().strftime("%H_%M_%S")} | Worker #{name} processing {ip_port}", flush=True)
         total_votes = {}
         report = {}
         responses = {}
@@ -160,15 +160,16 @@ async def worker(name, queue, session, writer, lock, args):
 async def main(args):
     global vt_quota_reached
     print(
-        f"Found {args.file_num} files to process. With {args.workers} workers and {args.queue_size} queue size.", flush=True
+        f"Found {args.file_num} files to process. With {args.workers} workers and {args.queue_size} queue size."
     )
     check_keys()
 
     start_time = time.time()
     total_matched = 0
     async with aiohttp.ClientSession() as session:
+        quota_workers = None
         for idx, file in enumerate(args.files):
-            print(f"\nProcessing file {idx + 1}/{args.file_num}:\n{file}", flush=True)
+            print(f"\nProcessing file {idx + 1}/{args.file_num}:\n{file}")
             queue = asyncio.Queue(maxsize=args.queue_size)  # buffer size
             lock = asyncio.Lock()
 
@@ -190,11 +191,13 @@ async def main(args):
                 writer.writeheader()
 
                 # Start workers
+                if not quota_workers:
+                    print("Starting quota worker...")
+                    quota_workers = asyncio.create_task(quota_worker(workers))
                 workers = [
                     asyncio.create_task(worker(i, queue, session, writer, lock, args))
                     for i in range(args.workers)
                 ]
-                quota_workers = asyncio.create_task(quota_worker(workers))
 
                 # Producer: read input CSV line by line
                 with open(file, newline="") as in_f:
@@ -202,7 +205,7 @@ async def main(args):
                     reader = csv.DictReader(in_f)
                     for row_idx, row in enumerate(reader):
                         if vt_quota_reached:
-                            print("Quota exceeded.", flush=True)
+                            print("Quota exceeded.")
                             exit(1)
                         ip = row["IP"]
                         port = row["Port"]
@@ -211,7 +214,7 @@ async def main(args):
                             matched_count += 1
                             # print(
                             #     f"\rPassed {row_idx+1} items so far ({matched_count} malicious)...        ",
-                            #     end="    ", flush=True
+                            #     end="    "
                             # )
                             await queue.put(f"{ip}:{port}")
                     total_matched += matched_count
@@ -227,9 +230,9 @@ async def main(args):
             avg_time = elapsed / (idx + 1)
             remaining = avg_time * (args.file_num - idx - 1)
             print(
-                f"\nReport for file {idx + 1}/{args.file_num} has been generated. Estimated time remaining: {remaining/60:.1f}m.", flush=True
+                f"\nReport for file {idx + 1}/{args.file_num} has been generated. Estimated time remaining: {remaining/60:.1f}m."
             )
-        print(f"\nReports with {total_matched} hits generated in {elapsed/60:.1f}m.", flush=True)
+        print(f"\nReports with {total_matched} hits generated in {elapsed/60:.1f}m.")
 
 
 if __name__ == "__main__":

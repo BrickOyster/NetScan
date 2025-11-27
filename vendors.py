@@ -1,5 +1,5 @@
 import aiohttp, asyncio, socket, requests, re
-WAITING_TIME = 35
+WAITING_TIME = 40
 
 
 async def check_connection():
