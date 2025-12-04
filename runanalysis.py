@@ -23,7 +23,7 @@ async def worker(name, queue, lock, args):
         date = file_path.split("/")[-1].split("_")[1]
         with open(file_path, newline="") as in_f:
             reader = csv.DictReader(in_f)
-            group = file_path.split("_")[1]
+            group = file_path.split("/")[1].split("_")[1]
             for row_idx, row in enumerate(reader):
                 identifier = f"{row['IP']}:{row['Port']}:{group}"
                 total_votes = eval(row.get("total_votes", {}))
@@ -195,6 +195,8 @@ if __name__ == "__main__":
         help="Size of the task queue.",
     )
     args = parser.parse_args()
+    args.output = (args.folder + args.output if args.folder.endswith("/") else args.folder + "/" + args.output)
+    print(f"Output folder set to {args.output}")
     args.start_date = args.folder.split("_")[-2:-1]
 
     files = glob.glob(os.path.join(args.folder, "**/report*.csv"), recursive=True)

@@ -206,12 +206,17 @@ async def main(args):
                     matched_count = 0
                     reader = csv.DictReader(in_f)
                     for row_idx, row in enumerate(reader):
-                        if vt_quota_reached:
-                            print("Quota exceeded.")
-                            exit(1)
+                        if args.start_from:
+                            args.start_from -= 1
+                            continue
                         ip = row["IP"]
                         port = row["Port"]
                         label = row["label"]
+                        if args.debug:
+                            print(f"{datetime.now().time()} | Enqueuing {ip}:{port}...")
+                        if vt_quota_reached:
+                            print(f"Quota exceeded on line {row_idx} ({ip}:{port}, {label}).")
+                            exit(1)
                         if label.lower() != "benign":
                             matched_count += 1
                             await queue.put(f"{ip}:{port}")
@@ -246,6 +251,10 @@ if __name__ == "__main__":
     parser.add_argument(
         "-q", "--queue_size", type=int, default=4, 
         help="Size of the queue buffer (default: 4)",
+    )
+    parser.add_argument(
+        "-sf", "--start_from", type=int, default=0, 
+        help="Skip first N entries in first file. For resuming interrupted runs.",
     )
     parser.add_argument(
         "-dbg", "--debug", action="store_true", 
