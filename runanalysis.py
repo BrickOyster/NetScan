@@ -49,7 +49,7 @@ async def main(args):
         asyncio.create_task(worker(i, queue, lock, args)) for i in range(args.workers)
     ]
 
-    with open (f"{args.output}out_logs.txt", "w") as f:
+    with open(f"{args.output}out_logs.txt", "w") as f:
         f.write(f"Total files: {args.file_num}\n")
         for idx, file in enumerate(args.files):
             await queue.put((idx, file))
@@ -90,10 +90,7 @@ async def main(args):
     ) as non_zero, open(
         f"{args.output}all_zero.csv", "w", newline="", encoding="utf-8"
     ) as all_zero:
-        fieldnames = [
-            "IP",
-            "Port"
-        ]
+        fieldnames = ["IP", "Port"]
         all_zero_writer = csv.DictWriter(all_zero, fieldnames=fieldnames)
         all_zero_writer.writeheader()
         non_zero_writer = csv.DictWriter(non_zero, fieldnames=fieldnames)
@@ -102,11 +99,13 @@ async def main(args):
             r, c = re
             statistics["Not complete"] += c
             for k, v in r.items():
-                ip,port,group=k.split(":")
+                ip, port, group = k.split(":")
                 if group not in groups_encountaired:
                     groups_encountaired[group] = len(groups_encountaired) + 1
-                    plt.figure(groups_encountaired[group], figsize=(19,10))
-                    plt.plot(date_list, [0]*len(date_list), linestyle='--', color='gray')
+                    plt.figure(groups_encountaired[group], figsize=(19, 10))
+                    plt.plot(
+                        date_list, [0] * len(date_list), linestyle="--", color="gray"
+                    )
                     plt.xlabel("Date")
                     plt.ylabel("Malicious Votes")
                     plt.title(f"Malicious Votes Over Time per IP:Port:{group}")
@@ -115,10 +114,10 @@ async def main(args):
 
                 statistics["Total IP"] += 1
                 if sum([x[1] for x in v]) == 0:
-                    all_zero_writer.writerow( { "IP": ip, "Port": port } )
+                    all_zero_writer.writerow({"IP": ip, "Port": port})
                     statistics["All zero votes"] += 1
                 else:
-                    non_zero_writer.writerow( { "IP": ip, "Port": port } )
+                    non_zero_writer.writerow({"IP": ip, "Port": port})
                     # Sort by date
                     v.sort(key=lambda x: x[0])
 
@@ -165,7 +164,7 @@ async def main(args):
     print(f"Off day one count: {off_day_one}")
     print(f"Off day two count: {off_day_two}")
     print(f"All files processed in {(datetime.now() - start_time).seconds}s.")
-    
+
     for i, p in groups_encountaired.items():
         plt.figure(p)
         plt.savefig(f"{args.output}figure_{p}.png")
@@ -195,7 +194,11 @@ if __name__ == "__main__":
         help="Size of the task queue.",
     )
     args = parser.parse_args()
-    args.output = (args.folder + args.output if args.folder.endswith("/") else args.folder + "/" + args.output)
+    args.output = (
+        args.folder + args.output
+        if args.folder.endswith("/")
+        else args.folder + "/" + args.output
+    )
     print(f"Output folder set to {args.output}")
     args.start_date = args.folder.split("_")[-2:-1]
 

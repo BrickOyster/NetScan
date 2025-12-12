@@ -1,4 +1,5 @@
 import aiohttp, asyncio, socket, requests, re
+
 WAITING_TIME = 40
 
 
@@ -12,9 +13,9 @@ async def check_connection():
 
 
 async def check_vt_quota(apikey):
-    headers = {"x-apikey": apikey,"accept": "application/json"}
- 
-    quota_url = "https://www.virustotal.com/api/v3/users/"+apikey+"/overall_quotas"
+    headers = {"x-apikey": apikey, "accept": "application/json"}
+
+    quota_url = "https://www.virustotal.com/api/v3/users/" + apikey + "/overall_quotas"
     quota_resp = {}
     try:
         quota_resp = requests.get(quota_url, headers=headers).json()
@@ -24,48 +25,49 @@ async def check_vt_quota(apikey):
         return left_today
     except Exception as e:
         print(f"Error while retrieving quota {e} \n {quota_resp}")
-        if quota_resp.get('error',{}).get('code',"") == "QuotaExceededError":
+        if quota_resp.get("error", {}).get("code", "") == "QuotaExceededError":
             return 0
         return -1
-    
 
-async def vt_scan_url(session, search_term, apikey):
+
+async def vt_scan_ip(session, search_term, apikey):
     """
-    Submits a URL for scanning on VirusTotal.
-    request: https://docs.virustotal.com/reference/url
+    Submits an IP for scanning on VirusTotal.
+    request: https://docs.virustotal.com/reference/rescan-ip
     """
-    url, port = search_term.split(":")
+    ip, port = search_term.split(":")
     testing = ""
     try:
-        payload = {"url": url}
         headers = {
             "accept": "application/json",
             "x-apikey": apikey,
             "content-type": "application/x-www-form-urlencoded",
         }
         async with session.post(
-            "https://www.virustotal.com/api/v3/urls", headers=headers, data=payload
+            f"https://www.virustotal.com/api/v3/ip_addresses/{ip}/analyse",
+            headers=headers,
         ) as resp:
             testing = await resp.text()
             data = await resp.json()
-            return await vt_get_url_analysis(session, data["data"]["id"], apikey)
+            print(data)
+            return await vt_get_ip_analysis(session, data["data"]["id"], apikey)
     except Exception as e:
         if testing.find("Too Many Requests") != -1:
             print("VirusTotal too many requests")
-            await asyncio.sleep(2*WAITING_TIME)
-            return await vt_scan_url(session, search_term, apikey)
+            await asyncio.sleep(2 * WAITING_TIME)
+            return await vt_scan_ip(session, search_term, apikey)
         if f"{e}".startswith("Cannot connect to host"):
             print("Lost connection")
             while not await check_connection():
                 await asyncio.sleep(WAITING_TIME)
             print("Connection restored")
             await asyncio.sleep(WAITING_TIME)
-            return await vt_scan_url(session, search_term, apikey)
+            return await vt_scan_ip(session, search_term, apikey)
         print(f"\nAn error occurred for vt_url {search_term}: \n{e} \n{testing}")
         return {}
 
 
-async def vt_get_url_analysis(session, id, apikey):
+async def vt_get_ip_analysis(session, id, apikey):
     """
     Fetches the URL analysis from VirusTotal.
     request: https://docs.virustotal.com/reference/url
@@ -75,6 +77,8 @@ async def vt_get_url_analysis(session, id, apikey):
     try:
         headers = {"accept": "application/json", "x-apikey": apikey}
         while response["attributes"]["status"] != "completed":
+            if response["attributes"]["status"] == "unspecified":
+                return response  # Panic return
             await asyncio.sleep(WAITING_TIME)
             async with session.get(
                 f"https://www.virustotal.com/api/v3/analyses/{id}", headers=headers
@@ -234,14 +238,14 @@ def fetch_cinsscore():
     try:
         response = requests.get(url, timeout=10)
         response.raise_for_status()  # Raise an exception if the request failed
-        
+
         # Use regex to extract all valid IPv4 addresses
         ips = response.text.splitlines()
         return ips
     except requests.RequestException as e:
         print(f"Error fetching IPs: {e}")
         return []
-    
+
 
 async def process_cb_report(cb_responce, total_votes, report):
     if cb_responce:
@@ -258,12 +262,12 @@ def fetch_openphish():
     Fetches the list of phishing URLs from OpenPhish and returns them as a list of strings.
     """
     url = "https://raw.githubusercontent.com/openphish/public_feed/refs/heads/main/feed.txt"
-    test = ''
+    test = ""
     missed = 0
     try:
         response = requests.get(url, timeout=10)
         response.raise_for_status()  # Raise an exception if the request failed
-        
+
         # Split the response text into lines (each line is a URL)
         urls = response.text.splitlines()
 

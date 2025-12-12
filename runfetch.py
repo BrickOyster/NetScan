@@ -10,11 +10,19 @@ load_dotenv()
 
 # Load txt servises
 cinsscore_list = fetch_cinsscore()
-async def cb_search_list(session, search_term, apikey): 
+
+
+async def cb_search_list(session, search_term, apikey):
     return cinsscore_list.count(search_term.split(":")[0])
+
+
 openphish_list, op_missed = fetch_openphish()
-async def op_search_list(session, search_term, apikey): 
+
+
+async def op_search_list(session, search_term, apikey):
     return openphish_list.count(search_term.split(":")[0])
+
+
 print(f"Loaded remote lists with {op_missed} missed items.")
 
 # ------------------- Service Configuration -------------------
@@ -28,15 +36,15 @@ services = {
     "CENSYS": "cs",
     "THREATFOX": "tf",
     "CINSSCORE": "cb",
-    "OPENPHIS": "op"
+    "OPENPHIS": "op",
 }  # Service name : abbreviation
 fetch_from_service = {
-    "VIRUSTOTAL": vt_scan_url,
+    "VIRUSTOTAL": vt_scan_ip,
     "ABUSEIPDB": ai_get_url_report,
     "CENSYS": cs_get_url_report,
     "THREATFOX": tf_search_ioc,
     "CINSSCORE": cb_search_list,
-    "OPENPHIS": op_search_list
+    "OPENPHIS": op_search_list,
 }  # Service name : function to fetch report
 process_service_report = {
     "VIRUSTOTAL": process_vt_report,
@@ -44,7 +52,7 @@ process_service_report = {
     "CENSYS": process_cs_report,
     "THREATFOX": process_tf_report,
     "CINSSCORE": process_cb_report,
-    "OPENPHIS": process_op_report
+    "OPENPHIS": process_op_report,
 }  # Service name : function to process report
 # -------------------------------------------------------------
 
@@ -86,8 +94,7 @@ def get_next_key(service):
         key_in_use[service] = key
         key_limit[service] = int(limit)
         print(
-            f"Next key for {service}: {key_in_use[service]}, Key limit: {key_limit[service]}",
-            flush=True
+            f"Next key for {service}: {key_in_use[service]}, Key limit: {key_limit[service]}"
         )
     else:
         key_in_use[service] = None
@@ -100,16 +107,17 @@ def check_keys():
 
 
 vt_quota_reached = False
+
+
 async def quota_worker(args):
     global vt_quota_reached
     vt_quota = 1
     while vt_quota != 0:
-        vt_quota = await check_vt_quota(key_in_use['VIRUSTOTAL'])
+        vt_quota = await check_vt_quota(key_in_use["VIRUSTOTAL"])
         if args.debug:
             print(f"{datetime.now().time()} | VT quota = {vt_quota}", flush=True)
-        await asyncio.sleep(4*WAITING_TIME)
+        await asyncio.sleep(4 * WAITING_TIME)
     vt_quota_reached = True
-
 
 
 async def worker(name, queue, session, writer, lock, args):
@@ -125,10 +133,13 @@ async def worker(name, queue, session, writer, lock, args):
             for service in KEYS:
                 key_limit[service] -= 1 if key_limit[service] else 0
             check_keys()
+            if args.debug:
+                print(
+                    f"{datetime.now().time()} | Worker #{name} processing {ip_port}",
+                    flush=True,
+                )
 
         # Process the IP
-        if args.debug:
-            print(f"{datetime.now().time()} | Worker #{name} processing {ip_port}", flush=True)
         total_votes = {}
         report = {}
         responses = {}
@@ -156,7 +167,7 @@ async def worker(name, queue, session, writer, lock, args):
             writer.writerow(to_write)
 
         queue.task_done()
-        await asyncio.sleep(31)
+        await asyncio.sleep(WAITING_TIME)
 
 
 async def main(args):
@@ -207,6 +218,12 @@ async def main(args):
                     reader = csv.DictReader(in_f)
                     for row_idx, row in enumerate(reader):
                         if args.start_from:
+                            if args.debug:
+                                print(
+                                    f"\rSkipping line {row_idx + 1}...",
+                                    end="        ",
+                                    flush=False,
+                                )
                             args.start_from -= 1
                             continue
                         ip = row["IP"]
@@ -215,7 +232,9 @@ async def main(args):
                         if args.debug:
                             print(f"{datetime.now().time()} | Enqueuing {ip}:{port}...")
                         if vt_quota_reached:
-                            print(f"Quota exceeded on line {row_idx} ({ip}:{port}, {label}).")
+                            print(
+                                f"Quota exceeded on line {row_idx} ({ip}:{port}, {label})."
+                            )
                             exit(1)
                         if label.lower() != "benign":
                             matched_count += 1
@@ -241,23 +260,33 @@ async def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Fetch URL reports.")
     parser.add_argument(
-        "-f", "--folder", required=True, 
-        help="Folder containing CSV files to process"
+        "-f", "--folder", required=True, help="Folder containing CSV files to process"
     )
     parser.add_argument(
-        "-w", "--workers", type=int, default=2, 
+        "-w",
+        "--workers",
+        type=int,
+        default=2,
         help="Number of concurrent workers (default: 2) to increase a paid VT API key is required",
     )
     parser.add_argument(
-        "-q", "--queue_size", type=int, default=4, 
+        "-q",
+        "--queue_size",
+        type=int,
+        default=4,
         help="Size of the queue buffer (default: 4)",
     )
     parser.add_argument(
-        "-sf", "--start_from", type=int, default=0, 
+        "-sf",
+        "--start_from",
+        type=int,
+        default=0,
         help="Skip first N entries in first file. For resuming interrupted runs.",
     )
     parser.add_argument(
-        "-dbg", "--debug", action="store_true", 
+        "-dbg",
+        "--debug",
+        action="store_true",
         help="Enable debug level prints",
     )
     args = parser.parse_args()
@@ -268,9 +297,9 @@ if __name__ == "__main__":
         if f.endswith(".csv")
     ]
     if not files:
-        print(f"No CSV files found in folder {args.folder}.", flush=True)
+        print(f"No CSV files found in folder {args.folder}.")
         exit(1)
     args.files = files
     args.file_num = len(args.files)
-    
+
     asyncio.run(main(args))
