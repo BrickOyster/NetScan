@@ -70,20 +70,14 @@ async def main(args):
         "Zero first day": 0,
         "Detected after zero first day": 0,
         "Zero first two days": 0,
-        "Zero first two days detected on third": 0,
-        "Zero first two days detected on third that increased after ": 0,
+        "Zero first two days detected after": 0,
         "Not complete": 0,
     }
     off_day_one = 0
     off_day_two = 0
 
-    start_date = date(2025, 10, 17)
     end_date = date.today()
 
-    date_list = [
-        (start_date + timedelta(days=i)).isoformat()
-        for i in range((end_date - start_date).days + 1)
-    ]
     groups_encountaired = {}
     with open(
         f"{args.output}non_zero.csv", "w", newline="", encoding="utf-8"
@@ -100,9 +94,14 @@ async def main(args):
             statistics["Not complete"] += c
             for k, v in r.items():
                 ip, port, group = k.split(":")
+                start_date = datetime.fromisoformat(args.start_dates[group]).date()
                 if group not in groups_encountaired:
                     groups_encountaired[group] = len(groups_encountaired) + 1
                     plt.figure(groups_encountaired[group], figsize=(19, 10))
+                    date_list = [
+                        (start_date + timedelta(days=i)).isoformat()
+                        for i in range((end_date - start_date).days + 1)
+                    ]
                     plt.plot(
                         date_list, [0] * len(date_list), linestyle="--", color="gray"
                     )
@@ -121,7 +120,8 @@ async def main(args):
                     # Sort by date
                     v.sort(key=lambda x: x[0])
 
-                    if v[0][0] in ["2025-10-17", "2025-10-18", "2025-10-19"]:
+                    if v[0][0] == start_date.isoformat():
+                        pass
                         if v[0][1] != 0:
                             statistics["Non zero first day"] += 1
                             for day_data in v[1:]:
@@ -132,25 +132,21 @@ async def main(args):
                                     break
                         else:
                             statistics["Zero first day"] += 1
-                            if (
-                                v[1][0] in ["2025-10-20", "2025-10-21", "2025-10-22"]
-                                and v[1][1] != 0
-                            ):
-                                statistics["Detected after zero first day"] += 1
+                            if v[1][0] == (start_date + timedelta(days=3)).isoformat():
+                                if v[1][1] != 0:
+                                    statistics["Detected after zero first day"] += 1
+                                else:
+                                    statistics["Zero first two days"] += 1
+                                    if (
+                                        v[2][0]
+                                        == (start_date + timedelta(days=6)).isoformat()
+                                        and sum([x[1] for x in v[2:]]) != 0
+                                    ):
+                                        statistics[
+                                            "Zero first two days detected after"
+                                        ] += 1
                             else:
                                 off_day_two += 1
-                        if v[0][1] + v[1][1] == 0:
-                            statistics["Zero first two days"] += 1
-                            if (
-                                v[2][0] in ["2025-10-23", "2025-10-24", "2025-10-25"]
-                                and v[2][1] != 0
-                            ):
-                                statistics["Zero first two days detected on third"] += 1
-                                for day_data in v[3:]:
-                                    if v[3][1] > v[2][1]:
-                                        statistics[
-                                            "Zero first two days detected on third that increased after"
-                                        ] += 1
                     else:
                         off_day_one += 1
 
@@ -159,16 +155,17 @@ async def main(args):
                     plt.plot(dates, votes, marker="o", label=k)
 
                 total_results[k] = v
-    for stat, val in statistics.items():
-        print(f"{stat}: {val}")
-    print(f"Off day one count: {off_day_one}")
-    print(f"Off day two count: {off_day_two}")
-    print(f"All files processed in {(datetime.now() - start_time).seconds}s.")
+    with open(f"{args.output}out_logs.txt", "a") as f:
+        f.write(f"\n\nOff day one count: {off_day_one}")
+        f.write(f"\nOff day two count: {off_day_two}")
+
+        for stat, val in statistics.items():
+            f.write(f"\n{stat}: {val}")
 
     for i, p in groups_encountaired.items():
         plt.figure(p)
         plt.savefig(f"{args.output}figure_{p}.png")
-    plt.show()
+    print(f"All files processed in {(datetime.now() - start_time).seconds}s.")
 
 
 if __name__ == "__main__":
@@ -206,6 +203,17 @@ if __name__ == "__main__":
     if not files:
         print(f"No files found in folder {args.folder}.")
         exit(1)
+
+    group_start = {}
+    for file in files:
+        group_name = file.split("/")[1].split("_")[1]
+        report_file = file.split("/")[-1]
+        group_date = report_file.split("_")[1]
+
+        if group_name not in group_start or group_date < group_start[group_name]:
+            group_start[group_name] = group_date
+    args.start_dates = group_start
+
     args.files = files
     args.file_num = len(files)
 

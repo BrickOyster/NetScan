@@ -49,7 +49,6 @@ async def vt_scan_ip(session, search_term, apikey):
         ) as resp:
             testing = await resp.text()
             data = await resp.json()
-            print(data)
             return await vt_get_ip_analysis(session, data["data"]["id"], apikey)
     except Exception as e:
         if testing.find("Too Many Requests") != -1:
