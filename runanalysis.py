@@ -1,6 +1,6 @@
 import os, glob, argparse, csv, asyncio, aiohttp
-import matplotlib.pyplot as plt
 from datetime import datetime, date, timedelta
+import matplotlib.pyplot as plt
 
 csv.field_size_limit(100000000)
 services = {
@@ -20,7 +20,7 @@ async def worker(name, queue, lock, args):
             queue.task_done()
             break
         file_idx, file_path = item
-        date = file_path.split("/")[-1].split("_")[1]
+        report_date = file_path.split("/")[-1].split("_")[1]
         with open(file_path, newline="") as in_f:
             reader = csv.DictReader(in_f)
             group = file_path.split("/")[1].split("_")[1]
@@ -31,7 +31,9 @@ async def worker(name, queue, lock, args):
                     not_complete += 1
                 if identifier not in results:
                     results[identifier] = []
-                results[identifier].append((date, total_votes.get("malicious", 0)))
+                results[identifier].append(
+                    (report_date, total_votes.get("malicious", 0))
+                )
         queue.task_done()
     return (results, not_complete)
 
@@ -40,7 +42,8 @@ async def main(args):
     queue = asyncio.Queue(maxsize=args.queue_size)  # buffer size
     lock = asyncio.Lock()
     start_time = datetime.now()
-    print(f"Running analysis for {args.file_num} files from the ...")
+    end_date = date.today()
+    print(f"Running analysis for {args.file_num} files from {args.folder} ...")
     if not os.path.exists(args.output):
         os.mkdir(args.output)
 
@@ -61,7 +64,22 @@ async def main(args):
 
     await queue.join()
     all_ret = await asyncio.gather(*workers)
-    total_results = {}
+
+    groups_encountaired = {}
+    group = "aggregate "
+    groups_encountaired[group] = len(groups_encountaired) + 1
+    plt.figure(groups_encountaired[group], figsize=(19, 10))
+    start_date = datetime.fromisoformat(
+        sorted(args.start_dates.items(), key=lambda item: item[1])[0][1]
+    ).date()
+    date_diff = [f"+{i}" for i in range(0,(end_date - start_date).days + 1, args.day_diff)]
+    total_results = [0] * len(date_diff)
+    plt.plot(date_diff, [0] * len(date_diff), linestyle="--", color="gray")
+    plt.xlabel("Date Diff")
+    plt.ylabel("Malicious Votes")
+    plt.title(f"Aggregate Malicious Votes Over Time")
+    plt.xticks(rotation=45)
+
     statistics = {
         "Total IP": 0,
         "All zero votes": 0,
@@ -75,27 +93,14 @@ async def main(args):
     }
     off_day_one = 0
     off_day_two = 0
-
-    end_date = date.today()
-
-    groups_encountaired = {}
-    group = "agragate"
-    groups_encountaired[group] = len(groups_encountaired) + 1
-    plt.figure(groups_encountaired[group], figsize=(19, 10))
-    start_date = datetime.fromisoformat(
-        sorted(args.start_dates.items(), key=lambda item: item[1])[0][1]
-    ).date()
-    date_list = [f"+{i}" for i in range((end_date - start_date).days + 1)]
-    plt.plot(date_list, [0] * len(date_list), linestyle="--", color="gray")
-    plt.xlabel("Date")
-    plt.ylabel("Malicious Votes")
-    plt.title(f"Malicious Votes Over Time per IP:Port:agragate")
-    plt.xticks(rotation=45)
-    with open(
-        f"{args.output}non_zero.csv", "w", newline="", encoding="utf-8"
-    ) as non_zero, open(
-        f"{args.output}all_zero.csv", "w", newline="", encoding="utf-8"
-    ) as all_zero:
+    with (
+        open(
+            f"{args.output}non_zero.csv", "w", newline="", encoding="utf-8"
+        ) as non_zero,
+        open(
+            f"{args.output}all_zero.csv", "w", newline="", encoding="utf-8"
+        ) as all_zero,
+    ):
         fieldnames = ["IP", "Port"]
         all_zero_writer = csv.DictWriter(all_zero, fieldnames=fieldnames)
         all_zero_writer.writeheader()
@@ -104,8 +109,8 @@ async def main(args):
         for re in all_ret:
             r, c = re
             statistics["Not complete"] += c
-            for k, v in r.items():
-                ip, port, group = k.split(":")
+            for ip_port_group, date_votes in r.items():
+                ip, port, group = ip_port_group.split(":")
                 start_date = datetime.fromisoformat(args.start_dates[group]).date()
                 if group not in groups_encountaired:
                     groups_encountaired[group] = len(groups_encountaired) + 1
@@ -124,49 +129,59 @@ async def main(args):
                 plt.figure(groups_encountaired[group])
 
                 statistics["Total IP"] += 1
-                if sum([x[1] for x in v]) == 0:
+                if sum([v[1] for v in date_votes]) == 0:
                     all_zero_writer.writerow({"IP": ip, "Port": port})
                     statistics["All zero votes"] += 1
                 else:
                     non_zero_writer.writerow({"IP": ip, "Port": port})
                     # Sort by date
-                    v.sort(key=lambda x: x[0])
+                    date_votes.sort(key=lambda v: v[0])
 
-                    if v[0][0] == start_date.isoformat():
-                        pass
-                        if v[0][1] != 0:
-                            statistics["Non zero first day"] += 1
-                            for day_data in v[1:]:
-                                if day_data[1] > v[0][1]:
-                                    statistics[
-                                        "Detected by more after non zero first day"
-                                    ] += 1
-                                    break
-                        else:
-                            statistics["Zero first day"] += 1
-                            if v[1][0] == (start_date + timedelta(days=3)).isoformat():
-                                if v[1][1] != 0:
-                                    statistics["Detected after zero first day"] += 1
-                                else:
-                                    statistics["Zero first two days"] += 1
-                                    if (
-                                        v[2][0]
-                                        == (start_date + timedelta(days=6)).isoformat()
-                                        and sum([x[1] for x in v[2:]]) != 0
-                                    ):
-                                        statistics[
-                                            "Zero first two days detected after"
-                                        ] += 1
-                            else:
-                                off_day_two += 1
+                    if (
+                        date_votes[0][0] == start_date.isoformat()
+                        and date_votes[0][1] != 0
+                    ):
+                        statistics["Non zero first day"] += 1
+                        if any(v[1] > date_votes[0][1] for v in date_votes[1:]):
+                            statistics["Detected by more after non zero first day"] += 1
+                    elif (
+                        date_votes[0][0] == start_date.isoformat()
+                        and date_votes[0][1] == 0
+                    ):
+                        statistics["Zero first day"] += 1
+                        if any(v[1] > 0 for v in date_votes[1:]):
+                            statistics["Detected after zero first day"] += 1
+                        if (
+                            len(date_votes) > 1
+                            and date_votes[1][0]
+                            == (start_date + timedelta(days=args.day_diff)).isoformat()
+                            and date_votes[1][1] == 0
+                        ):
+                            statistics["Zero first two days"] += 1
+                            if any(v[1] > 0 for v in date_votes[2:]):
+                                statistics["Zero first two days detected after"] += 1
+                        elif (
+                            len(date_votes) > 1
+                            and date_votes[1][0]
+                            == (start_date + timedelta(days=args.day_diff)).isoformat()
+                        ):
+                            off_day_two += 1
                     else:
                         off_day_one += 1
 
-                    dates = [x[0] for x in v]
-                    votes = [x[1] for x in v]
-                    plt.plot(dates, votes, marker="o", label=k)
+                    dates = [x[0] for x in date_votes]
+                    votes = [x[1] for x in date_votes]
+                    plt.plot(dates, votes, marker="o", label=ip_port_group)
 
-                total_results[k] = v
+                    for d_idx, d in enumerate(dates):
+                        day_diff = (datetime.fromisoformat(d).date() - start_date).days
+                        if day_diff % args.day_diff != 0:
+                            print(day_diff, args.day_diff)
+                        total_results[day_diff//args.day_diff] += votes[d_idx]
+
+    plt.figure(groups_encountaired["aggregate "])
+    plt.plot(date_diff, total_results, marker="o")
+
     with open(f"{args.output}out_logs.txt", "a") as f:
         f.write(f"\n\nOff day one count: {off_day_one}")
         f.write(f"\nOff day two count: {off_day_two}")
@@ -184,6 +199,13 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run analysis on ip data.")
     parser.add_argument(
         "-f", "--folder", required=True, help="Input file containing IP data"
+    )
+    parser.add_argument(
+        "-d",
+        "--day_diff",
+        type=int,
+        default=3,
+        help="Number of days between first and second scan of group.",
     )
     parser.add_argument(
         "-w",
