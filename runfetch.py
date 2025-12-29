@@ -120,54 +120,55 @@ async def quota_worker(args):
     vt_quota_reached = True
 
 
-async def worker(name, queue, session, writer, lock, args):
+async def worker(name, queue, writer, lock, args):
     """Consumes IPs from queue, processes them, and writes results to CSV"""
-    while True:
-        ip_port = await queue.get()
-        if ip_port is None:  # Sentinel to stop worker
-            queue.task_done()
-            break
-        ip, port = ip_port.split(":")
+    async with aiohttp.ClientSession() as session:
+        while True:
+            ip_port = await queue.get()
+            if ip_port is None:  # Sentinel to stop worker
+                queue.task_done()
+                break
+            ip, port = ip_port.split(":")
 
-        async with lock:  # make sure only one worker writes at a time
-            for service in KEYS:
-                key_limit[service] -= 1 if key_limit[service] else 0
-            check_keys()
-            if args.debug:
-                print(
-                    f"{datetime.now().time()} | Worker #{name} processing {ip_port}",
-                    flush=True,
+            async with lock:  # make sure only one worker writes at a time
+                for service in KEYS:
+                    key_limit[service] -= 1 if key_limit[service] else 0
+                check_keys()
+                if args.debug:
+                    print(
+                        f"{datetime.now().time()} | Worker #{name} processing {ip_port}",
+                        flush=True,
+                    )
+
+            # Process the IP
+            total_votes = {}
+            report = {}
+            responses = {}
+
+            for service in services:
+                if not key_in_use[service]:
+                    responses[f"{services[service]}_response"] = {}
+                    continue
+                responses[f"{services[service]}_response"] = await fetch_from_service[
+                    service
+                ](session, f"{ip_port}", *key_in_use[service].split("||"))
+                total_votes, report = await process_service_report[service](
+                    responses[f"{services[service]}_response"], total_votes, report
                 )
 
-        # Process the IP
-        total_votes = {}
-        report = {}
-        responses = {}
+            # Write results row by row
+            async with lock:  # make sure only one worker writes at a time
+                to_write = {
+                    "IP": ip,
+                    "Port": port,
+                    "total_votes": total_votes,
+                    "report": report,
+                }
+                to_write.update(responses)
+                writer.writerow(to_write)
 
-        for service in services:
-            if not key_in_use[service]:
-                responses[f"{services[service]}_response"] = {}
-                continue
-            responses[f"{services[service]}_response"] = await fetch_from_service[
-                service
-            ](session, f"{ip_port}", *key_in_use[service].split("||"))
-            total_votes, report = await process_service_report[service](
-                responses[f"{services[service]}_response"], total_votes, report
-            )
-
-        # Write results row by row
-        async with lock:  # make sure only one worker writes at a time
-            to_write = {
-                "IP": ip,
-                "Port": port,
-                "total_votes": total_votes,
-                "report": report,
-            }
-            to_write.update(responses)
-            writer.writerow(to_write)
-
-        queue.task_done()
-        await asyncio.sleep(WAITING_TIME)
+            queue.task_done()
+            await asyncio.sleep(WAITING_TIME)
 
 
 async def main(args):
@@ -179,82 +180,81 @@ async def main(args):
 
     start_time = time.time()
     total_matched = 0
-    async with aiohttp.ClientSession() as session:
-        quota_workers = None
-        for idx, file in enumerate(args.files):
-            print(f"\nProcessing file {idx + 1}/{args.file_num}:\n{file}")
-            queue = asyncio.Queue(maxsize=args.queue_size)  # buffer size
-            lock = asyncio.Lock()
+    quota_workers = None
+    for idx, file in enumerate(args.files):
+        print(f"\nProcessing file {idx + 1}/{args.file_num}:\n{file}")
+        queue = asyncio.Queue(maxsize=args.queue_size)  # buffer size
+        lock = asyncio.Lock()
 
-            date = datetime.now().strftime("%Y-%m-%d_%H_%M_%S")
-            OUTPUT_FILE = f"{file.removesuffix('.csv')}/report_{date}.csv"
-            if not os.path.exists(file.removesuffix(".csv")):
-                os.mkdir(file.removesuffix(".csv"))
+        date = datetime.now().strftime("%Y-%m-%d_%H_%M_%S")
+        OUTPUT_FILE = f"{file.removesuffix('.csv')}/report_{date}.csv"
+        if not os.path.exists(file.removesuffix(".csv")):
+            os.mkdir(file.removesuffix(".csv"))
 
-            with open(OUTPUT_FILE, "w", newline="", encoding="utf-8") as out_f:
-                fieldnames = [
-                    "IP",
-                    "Port",
-                    "total_votes",
-                    "report",
-                ]
-                for service in services:
-                    fieldnames.append(f"{services[service]}_response")
-                writer = csv.DictWriter(out_f, fieldnames=fieldnames)
-                writer.writeheader()
+        with open(OUTPUT_FILE, "w", newline="", encoding="utf-8") as out_f:
+            fieldnames = [
+                "IP",
+                "Port",
+                "total_votes",
+                "report",
+            ]
+            for service in services:
+                fieldnames.append(f"{services[service]}_response")
+            writer = csv.DictWriter(out_f, fieldnames=fieldnames)
+            writer.writeheader()
 
-                # Start workers
-                if not quota_workers:
-                    print("Starting quota worker...")
-                    quota_workers = asyncio.create_task(quota_worker(args))
-                workers = [
-                    asyncio.create_task(worker(i, queue, session, writer, lock, args))
-                    for i in range(args.workers)
-                ]
+            # Start workers
+            if not quota_workers:
+                print("Starting quota worker...")
+                quota_workers = asyncio.create_task(quota_worker(args))
+            workers = [
+                asyncio.create_task(worker(i, queue, writer, lock, args))
+                for i in range(args.workers)
+            ]
 
-                # Producer: read input CSV line by line
-                with open(file, newline="") as in_f:
-                    matched_count = 0
-                    reader = csv.DictReader(in_f)
-                    for row_idx, row in enumerate(reader):
-                        if args.start_from:
-                            if args.debug:
-                                print(
-                                    f"\rSkipping line {row_idx + 1}...",
-                                    end="        ",
-                                    flush=False,
-                                )
-                            args.start_from -= 1
-                            continue
-                        ip = row["IP"]
-                        port = row["Port"]
-                        label = row["label"]
+            # Producer: read input CSV line by line
+            with open(file, newline="") as in_f:
+                matched_count = 0
+                reader = csv.DictReader(in_f)
+                for row_idx, row in enumerate(reader):
+                    if args.start_from:
                         if args.debug:
-                            print(f"{datetime.now().time()} | Enqueuing {ip}:{port}...")
-                        if vt_quota_reached:
                             print(
-                                f"Quota exceeded on line {row_idx} ({ip}:{port}, {label})."
+                                f"\rSkipping line {row_idx + 1}...",
+                                end="        ",
+                                flush=False,
                             )
-                            exit(1)
-                        if label.lower() != "benign":
-                            matched_count += 1
-                            await queue.put(f"{ip}:{port}")
-                    total_matched += matched_count
+                        args.start_from -= 1
+                        continue
+                    ip = row["IP"]
+                    port = row["Port"]
+                    label = row["label"]
+                    if args.debug:
+                        print(f"{datetime.now().time()} | Enqueuing {ip}:{port}...")
+                    if vt_quota_reached:
+                        print(
+                            f"Quota exceeded on line {row_idx} ({ip}:{port}, {label})."
+                        )
+                        exit(1)
+                    if label.lower() != "benign":
+                        matched_count += 1
+                        await queue.put(f"{ip}:{port}")
+                total_matched += matched_count
 
-                    # Send sentinel to stop workers
-                    for _ in workers:
-                        await queue.put(None)
+                # Send sentinel to stop workers
+                for _ in workers:
+                    await queue.put(None)
 
-                    await queue.join()
-                    await asyncio.gather(*workers)
+                await queue.join()
+                await asyncio.gather(*workers)
 
-            elapsed = time.time() - start_time
-            avg_time = elapsed / (idx + 1)
-            remaining = avg_time * (args.file_num - idx - 1)
-            print(
-                f"\nReport for file {idx + 1}/{args.file_num} has been generated. Estimated time remaining: {remaining/60:.1f}m."
-            )
-        print(f"\nReports with {total_matched} hits generated in {elapsed/60:.1f}m.")
+        elapsed = time.time() - start_time
+        avg_time = elapsed / (idx + 1)
+        remaining = avg_time * (args.file_num - idx - 1)
+        print(
+            f"\nReport for file {idx + 1}/{args.file_num} has been generated. Estimated time remaining: {remaining/60:.1f}m."
+        )
+    print(f"\nReports with {total_matched} hits generated in {elapsed/60:.1f}m.")
 
 
 if __name__ == "__main__":
