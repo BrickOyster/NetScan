@@ -79,6 +79,18 @@ async def main(args):
     end_date = date.today()
 
     groups_encountaired = {}
+    group = "agragate"
+    groups_encountaired[group] = len(groups_encountaired) + 1
+    plt.figure(groups_encountaired[group], figsize=(19, 10))
+    start_date = datetime.fromisoformat(
+        sorted(args.start_dates.items(), key=lambda item: item[1])[0][1]
+    ).date()
+    date_list = [f"+{i}" for i in range((end_date - start_date).days + 1)]
+    plt.plot(date_list, [0] * len(date_list), linestyle="--", color="gray")
+    plt.xlabel("Date")
+    plt.ylabel("Malicious Votes")
+    plt.title(f"Malicious Votes Over Time per IP:Port:agragate")
+    plt.xticks(rotation=45)
     with open(
         f"{args.output}non_zero.csv", "w", newline="", encoding="utf-8"
     ) as non_zero, open(
@@ -164,7 +176,7 @@ async def main(args):
 
     for i, p in groups_encountaired.items():
         plt.figure(p)
-        plt.savefig(f"{args.output}figure_{p}.png")
+        plt.savefig(f"{args.output}figure_{i}.png")
     print(f"All files processed in {(datetime.now() - start_time).seconds}s.")
 
 
