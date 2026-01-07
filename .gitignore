@@ -1,7 +1,7 @@
 # Extra
 dummy_tests/
 csv_tlscope/
-group_*/
+group_*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

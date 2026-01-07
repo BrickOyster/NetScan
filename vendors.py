@@ -131,7 +131,7 @@ async def process_ai_report(ai_response, total_votes, report):
         if ai_response["abuseConfidenceScore"] > 25:
             report["AbuseIPDB"] = {"category": "malicious"}
             total_votes["malicious"] = total_votes.get("malicious", 0) + 1
-        elif ai_response["abuseConfidenceScore"] > 15:
+        elif ai_response["abuseConfidenceScore"] > 10:
             report["AbuseIPDB"] = {"category": "suspicious"}
             total_votes["suspicious"] = total_votes.get("suspicious", 0) + 1
         else:

@@ -8,6 +8,8 @@ services = {
     "ABUSEIPDB": "ai",
     "CENSYS": "cs",
     "THREATFOX": "tf",
+    "CINSSCORE": "cb",
+    "OPENPHIS": "op",
 }  # Service name : abbreviation
 
 
@@ -32,7 +34,11 @@ async def worker(name, queue, lock, args):
                 if identifier not in results:
                     results[identifier] = []
                 results[identifier].append(
-                    (report_date, total_votes.get("malicious", 0))
+                    (
+                        report_date,
+                        total_votes.get("malicious", 0)
+                        + total_votes.get("suspicious", 0),
+                    )
                 )
         queue.task_done()
     return (results, not_complete)
@@ -66,19 +72,21 @@ async def main(args):
     all_ret = await asyncio.gather(*workers)
 
     groups_encountaired = {}
-    group = "aggregate "
-    groups_encountaired[group] = len(groups_encountaired) + 1
-    plt.figure(groups_encountaired[group], figsize=(19, 10))
     start_date = datetime.fromisoformat(
         sorted(args.start_dates.items(), key=lambda item: item[1])[0][1]
     ).date()
-    date_diff = [f"+{i}" for i in range(0,(end_date - start_date).days + 1, args.day_diff)]
-    total_results = [0] * len(date_diff)
-    plt.plot(date_diff, [0] * len(date_diff), linestyle="--", color="gray")
-    plt.xlabel("Date Diff")
-    plt.ylabel("Malicious Votes")
-    plt.title(f"Aggregate Malicious Votes Over Time")
-    plt.xticks(rotation=45)
+    date_diff = [
+        f"+{i}" for i in range(0, (end_date - start_date).days + 1, args.day_diff)
+    ]
+    for group in ["aggregate", "average"]:
+        groups_encountaired[group] = len(groups_encountaired) + 1
+        plt.figure(groups_encountaired[group], figsize=(19, 10))
+        total_results = [0] * len(date_diff)
+        plt.plot(date_diff, [0] * len(date_diff), linestyle="--", color="gray")
+        plt.xlabel("Date Diff")
+        plt.ylabel("Malicious Votes")
+        plt.title(f"{group} Malicious Votes Over Time")
+        plt.xticks(rotation=45)
 
     statistics = {
         "Total IP": 0,
@@ -177,10 +185,16 @@ async def main(args):
                         day_diff = (datetime.fromisoformat(d).date() - start_date).days
                         if day_diff % args.day_diff != 0:
                             print(day_diff, args.day_diff)
-                        total_results[day_diff//args.day_diff] += votes[d_idx]
+                        total_results[day_diff // args.day_diff] += votes[d_idx]
 
-    plt.figure(groups_encountaired["aggregate "])
+    plt.figure(groups_encountaired["aggregate"])
     plt.plot(date_diff, total_results, marker="o")
+    plt.figure(groups_encountaired["average"])
+    average_results = [
+        x / (statistics["Total IP"] - statistics["All zero votes"])
+        for x in total_results
+    ]
+    plt.plot(date_diff, average_results, marker="o")
 
     with open(f"{args.output}out_logs.txt", "a") as f:
         f.write(f"\n\nOff day one count: {off_day_one}")
