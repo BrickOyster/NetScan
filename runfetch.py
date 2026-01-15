@@ -114,8 +114,15 @@ async def quota_worker(args):
     vt_quota = 1
     while vt_quota != 0:
         vt_quota = await check_vt_quota(key_in_use["VIRUSTOTAL"])
+        allowed_day = vt_quota["api_requests_daily"]["user"]["allowed"]
+        left_day = allowed_day - vt_quota["api_requests_daily"]["user"]["used"]
+        allowed_hour = vt_quota["api_requests_hourly"]["user"]["allowed"]
+        left_hour = allowed_hour - vt_quota["api_requests_hourly"]["user"]["used"]
         if args.debug:
-            print(f"{datetime.now().time()} | VT quota = {vt_quota}", flush=True)
+            print(
+                f"{datetime.now().time()} | VT quota = H: {left_hour}/{allowed_hour} | D:{left_day}/{allowed_day}",
+                flush=True,
+            )
         await asyncio.sleep(4 * WAITING_TIME)
     vt_quota_reached = True
 

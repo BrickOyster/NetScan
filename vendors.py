@@ -19,10 +19,9 @@ async def check_vt_quota(apikey):
     quota_resp = {}
     try:
         quota_resp = requests.get(quota_url, headers=headers).json()
-        allowed_today = quota_resp["data"]["api_requests_daily"]["user"]["allowed"]
-        used_today = quota_resp["data"]["api_requests_daily"]["user"]["used"]
-        left_today = int(allowed_today) - int(used_today)
-        return left_today
+        daily = quota_resp["data"]["api_requests_daily"]
+        hourly = quota_resp["data"]["api_requests_hourly"]
+        return {"api_requests_daily": daily, "api_requests_hourly": hourly}
     except Exception as e:
         print(f"Error while retrieving quota {e} \n {quota_resp}")
         if quota_resp.get("error", {}).get("code", "") == "QuotaExceededError":
