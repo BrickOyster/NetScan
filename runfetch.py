@@ -106,13 +106,10 @@ def check_keys():
     [get_next_key(service) for service in KEYS if key_limit[service] == 0]
 
 
-vt_quota_reached = False
-
-
 async def quota_worker(args):
-    global vt_quota_reached
-    vt_quota = 1
-    while vt_quota != 0:
+    left_day = 100
+    while left_day != 0:
+        await asyncio.sleep(4 * WAITING_TIME)
         vt_quota = await check_vt_quota(key_in_use["VIRUSTOTAL"])
         allowed_day = vt_quota["api_requests_daily"]["user"]["allowed"]
         left_day = allowed_day - vt_quota["api_requests_daily"]["user"]["used"]
@@ -123,8 +120,13 @@ async def quota_worker(args):
                 f"{datetime.now().time()} | VT quota = H: {left_hour}/{allowed_hour} | D:{left_day}/{allowed_day}",
                 flush=True,
             )
-        await asyncio.sleep(4 * WAITING_TIME)
-    vt_quota_reached = True
+
+    print("VT quota exceeded, cancelling all tasks...")
+    for task in asyncio.all_tasks():
+        if task.get_name() == "quota-worker":
+            continue
+        print(f"Canceling task: {task.get_name()}")
+        task.cancel("quota exceeded error")
 
 
 async def worker(name, queue, writer, lock, args):
@@ -179,11 +181,13 @@ async def worker(name, queue, writer, lock, args):
 
 
 async def main(args):
-    global vt_quota_reached
     print(
         f"Found {args.file_num} files to process. With {args.workers} workers and {args.queue_size} queue size."
     )
     check_keys()
+
+    if args.start_from:
+        print(f"Resuming from entry {args.start_from}.")
 
     start_time = time.time()
     total_matched = 0
@@ -213,9 +217,13 @@ async def main(args):
             # Start workers
             if not quota_workers:
                 print("Starting quota worker...")
-                quota_workers = asyncio.create_task(quota_worker(args))
+                quota_workers = asyncio.create_task(
+                    quota_worker(args), name="quota-worker"
+                )
             workers = [
-                asyncio.create_task(worker(i, queue, writer, lock, args))
+                asyncio.create_task(
+                    worker(i, queue, writer, lock, args), name=f"worker-{i}"
+                )
                 for i in range(args.workers)
             ]
 
@@ -225,12 +233,6 @@ async def main(args):
                 reader = csv.DictReader(in_f)
                 for row_idx, row in enumerate(reader):
                     if args.start_from:
-                        if args.debug:
-                            print(
-                                f"\rSkipping line {row_idx + 1}...",
-                                end="        ",
-                                flush=False,
-                            )
                         args.start_from -= 1
                         continue
                     ip = row["IP"]
@@ -238,11 +240,6 @@ async def main(args):
                     label = row["label"]
                     if args.debug:
                         print(f"{datetime.now().time()} | Enqueuing {ip}:{port}...")
-                    if vt_quota_reached:
-                        print(
-                            f"Quota exceeded on line {row_idx} ({ip}:{port}, {label})."
-                        )
-                        exit(1)
                     if label.lower() != "benign":
                         matched_count += 1
                         await queue.put(f"{ip}:{port}")
@@ -309,4 +306,11 @@ if __name__ == "__main__":
     args.files = files
     args.file_num = len(args.files)
 
-    asyncio.run(main(args))
+    try:
+        asyncio.run(main(args))
+    except KeyboardInterrupt:
+        print("Process interrupted by user. Exiting...")
+        exit(1)
+    except asyncio.CancelledError as e:
+        print(f"Process cancelled due to {e.args}. Exiting...")
+        exit(1)
