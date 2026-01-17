@@ -25,8 +25,15 @@ async def check_vt_quota(apikey):
     except Exception as e:
         print(f"Error while retrieving quota {e} \n {quota_resp}")
         if quota_resp.get("error", {}).get("code", "") == "QuotaExceededError":
-            return 0
-        return -1
+            return {
+                "api_requests_daily": {"user": {"allowed": 500, "used": 500}},
+                "api_requests_hourly": {"user": {"allowed": 500, "used": 500}},
+            }
+
+        return {
+            "api_requests_daily": {"user": {"allowed": 500, "used": 501}},
+            "api_requests_hourly": {"user": {"allowed": 500, "used": 501}},
+        }
 
 
 async def vt_scan_ip(session, search_term, apikey):
