@@ -308,9 +308,6 @@ if __name__ == "__main__":
 
     try:
         asyncio.run(main(args))
-    except KeyboardInterrupt:
-        print("Process interrupted by user. Exiting...")
-        exit(1)
     except asyncio.CancelledError as e:
         print(f"Process cancelled due to {e.args}. Exiting...")
         exit(1)
