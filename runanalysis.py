@@ -38,6 +38,8 @@ async def worker(name, queue, lock, args):
                         report_date,
                         total_votes.get("malicious", 0)
                         + total_votes.get("suspicious", 0),
+                        total_votes.get("undetected", 0)
+                        + total_votes.get("harmless", 0),
                     )
                 )
         queue.task_done()
@@ -75,13 +77,19 @@ async def main(args):
     start_date = datetime.fromisoformat(
         sorted(args.start_dates.items(), key=lambda item: item[1])[0][1]
     ).date()
+    end_date = datetime.fromisoformat(
+        sorted(args.end_dates.items(), key=lambda item: item[1])[-1][1]
+    ).date()
     date_diff = [
         f"+{i}" for i in range(0, (end_date - start_date).days + 1, args.day_diff)
     ]
-    for group in ["aggregate", "average"]:
+    print(f"Start date: {start_date}, End date: {end_date}")
+    total_results = {}
+    for_precentage = [(0, 0)] * len(date_diff)  # (malicious, harmless)
+    for group in ["aggregate", "diff", "precentage"]:
         groups_encountaired[group] = len(groups_encountaired) + 1
         plt.figure(groups_encountaired[group], figsize=(19, 10))
-        total_results = [0] * len(date_diff)
+        total_results[group] = [0] * len(date_diff)
         plt.plot(date_diff, [0] * len(date_diff), linestyle="--", color="gray")
         plt.xlabel("Date Diff")
         plt.ylabel("Malicious Votes")
@@ -117,7 +125,7 @@ async def main(args):
         for re in all_ret:
             r, c = re
             statistics["Not complete"] += c
-            for ip_port_group, date_votes in r.items():
+            for ip_port_group, group_res in r.items():
                 ip, port, group = ip_port_group.split(":")
                 start_date = datetime.fromisoformat(args.start_dates[group]).date()
                 if group not in groups_encountaired:
@@ -137,64 +145,85 @@ async def main(args):
                 plt.figure(groups_encountaired[group])
 
                 statistics["Total IP"] += 1
-                if sum([v[1] for v in date_votes]) == 0:
+                if sum([v[1] for v in group_res]) == 0:
                     all_zero_writer.writerow({"IP": ip, "Port": port})
                     statistics["All zero votes"] += 1
                 else:
                     non_zero_writer.writerow({"IP": ip, "Port": port})
                     # Sort by date
-                    date_votes.sort(key=lambda v: v[0])
+                    group_res.sort(key=lambda v: v[0])
 
                     if (
-                        date_votes[0][0] == start_date.isoformat()
-                        and date_votes[0][1] != 0
+                        group_res[0][0] == start_date.isoformat()
+                        and group_res[0][1] != 0
                     ):
                         statistics["Non zero first day"] += 1
-                        if any(v[1] > date_votes[0][1] for v in date_votes[1:]):
+                        if any(v[1] > group_res[0][1] for v in group_res[1:]):
                             statistics["Detected by more after non zero first day"] += 1
                     elif (
-                        date_votes[0][0] == start_date.isoformat()
-                        and date_votes[0][1] == 0
+                        group_res[0][0] == start_date.isoformat()
+                        and group_res[0][1] == 0
                     ):
                         statistics["Zero first day"] += 1
-                        if any(v[1] > 0 for v in date_votes[1:]):
+                        if any(v[1] > 0 for v in group_res[1:]):
                             statistics["Detected after zero first day"] += 1
                         if (
-                            len(date_votes) > 1
-                            and date_votes[1][0]
+                            len(group_res) > 1
+                            and group_res[1][0]
                             == (start_date + timedelta(days=args.day_diff)).isoformat()
-                            and date_votes[1][1] == 0
+                            and group_res[1][1] == 0
                         ):
                             statistics["Zero first two days"] += 1
-                            if any(v[1] > 0 for v in date_votes[2:]):
+                            if any(v[1] > 0 for v in group_res[2:]):
                                 statistics["Zero first two days detected after"] += 1
                         elif (
-                            len(date_votes) > 1
-                            and date_votes[1][0]
+                            len(group_res) > 1
+                            and group_res[1][0]
                             == (start_date + timedelta(days=args.day_diff)).isoformat()
                         ):
                             off_day_two += 1
                     else:
                         off_day_one += 1
 
-                    dates = [x[0] for x in date_votes]
-                    votes = [x[1] for x in date_votes]
-                    plt.plot(dates, votes, marker="o", label=ip_port_group)
+                    dates = [x[0] for x in group_res]
+                    malicious_votes = [x[1] for x in group_res]
+                    harmless_votes = [x[2] for x in group_res]
+                    plt.plot(dates, malicious_votes, marker="o", label=ip_port_group)
 
                     for d_idx, d in enumerate(dates):
                         day_diff = (datetime.fromisoformat(d).date() - start_date).days
+                        int_day_diff = day_diff // args.day_diff
                         if day_diff % args.day_diff != 0:
                             print(day_diff, args.day_diff)
-                        total_results[day_diff // args.day_diff] += votes[d_idx]
+                        total_results["aggregate"][int_day_diff] += malicious_votes[
+                            d_idx
+                        ]
+                        if int_day_diff == 0:
+                            total_results["diff"][int_day_diff] += 0
+                        else:
+                            total_results["diff"][int_day_diff] += (
+                                malicious_votes[d_idx] - malicious_votes[d_idx - 1]
+                            )
+                        if malicious_votes[d_idx] > 0:
+                            for_precentage[int_day_diff] = (
+                                for_precentage[int_day_diff][0] + 1,
+                                for_precentage[int_day_diff][1],
+                            )
+                        else:
+                            for_precentage[int_day_diff] = (
+                                for_precentage[int_day_diff][0],
+                                for_precentage[int_day_diff][1] + 1,
+                            )
+        total_results["precentage"] = [
+            (m / (m + h) if m + h > 0 else 0) for m, h in for_precentage
+        ]
 
     plt.figure(groups_encountaired["aggregate"])
-    plt.plot(date_diff, total_results, marker="o")
-    plt.figure(groups_encountaired["average"])
-    average_results = [
-        x / (statistics["Total IP"] - statistics["All zero votes"])
-        for x in total_results
-    ]
-    plt.plot(date_diff, average_results, marker="o")
+    plt.plot(date_diff, total_results["aggregate"], marker="o")
+    plt.figure(groups_encountaired["precentage"])
+    plt.plot(date_diff, total_results["precentage"], marker="o")
+    plt.figure(groups_encountaired["diff"])
+    plt.plot(date_diff, total_results["diff"], marker="o")
 
     with open(f"{args.output}out_logs.txt", "a") as f:
         f.write(f"\n\nOff day one count: {off_day_one}")
@@ -253,6 +282,7 @@ if __name__ == "__main__":
         exit(1)
 
     group_start = {}
+    group_end = {}
     for file in files:
         group_name = file.split("/")[1].split("_")[1]
         report_file = file.split("/")[-1]
@@ -260,7 +290,10 @@ if __name__ == "__main__":
 
         if group_name not in group_start or group_date < group_start[group_name]:
             group_start[group_name] = group_date
+        if group_name not in group_end or group_date > group_end[group_name]:
+            group_end[group_name] = group_date
     args.start_dates = group_start
+    args.end_dates = group_end
 
     args.files = files
     args.file_num = len(files)
