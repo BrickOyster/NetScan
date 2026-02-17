@@ -187,35 +187,34 @@ async def main(args):
 
                     dates = [x[0] for x in group_res]
                     malicious_votes = [x[1] for x in group_res]
-                    harmless_votes = [x[2] for x in group_res]
                     plt.plot(dates, malicious_votes, marker="o", label=ip_port_group)
 
-                    for d_idx, d in enumerate(dates):
-                        day_diff = (datetime.fromisoformat(d).date() - start_date).days
-                        int_day_diff = day_diff // args.day_diff
-                        if day_diff % args.day_diff != 0:
-                            print(day_diff, args.day_diff)
-                        total_results["aggregate"][int_day_diff] += malicious_votes[
-                            d_idx
-                        ]
-                        if int_day_diff == 0:
-                            total_results["diff"][int_day_diff] += 0
-                        else:
-                            total_results["diff"][int_day_diff] += (
-                                malicious_votes[d_idx] - malicious_votes[d_idx - 1]
-                            )
-                        if malicious_votes[d_idx] > 0:
-                            for_precentage[int_day_diff] = (
-                                for_precentage[int_day_diff][0] + 1,
-                                for_precentage[int_day_diff][1],
-                            )
-                        else:
-                            for_precentage[int_day_diff] = (
-                                for_precentage[int_day_diff][0],
-                                for_precentage[int_day_diff][1] + 1,
-                            )
+                dates = [x[0] for x in group_res]
+                malicious_votes = [x[1] for x in group_res]
+                for d_idx, d in enumerate(dates):
+                    day_diff = (datetime.fromisoformat(d).date() - start_date).days
+                    int_day_diff = day_diff // args.day_diff
+                    if day_diff % args.day_diff != 0:
+                        print(day_diff, args.day_diff)
+                    total_results["aggregate"][int_day_diff] += malicious_votes[d_idx]
+                    if int_day_diff == 0:
+                        total_results["diff"][int_day_diff] += 0
+                    else:
+                        total_results["diff"][int_day_diff] += (
+                            malicious_votes[d_idx] - malicious_votes[d_idx - 1]
+                        )
+                    if malicious_votes[d_idx] > 0:
+                        for_precentage[int_day_diff] = (
+                            for_precentage[int_day_diff][0] + 1,
+                            for_precentage[int_day_diff][1],
+                        )
+                    else:
+                        for_precentage[int_day_diff] = (
+                            for_precentage[int_day_diff][0],
+                            for_precentage[int_day_diff][1] + 1,
+                        )
         total_results["precentage"] = [
-            (m / (m + h) if m + h > 0 else 0) for m, h in for_precentage
+            (m * 100.0 / (m + h) if m + h > 0 else 0) for m, h in for_precentage
         ]
 
     plt.figure(groups_encountaired["aggregate"])
@@ -254,7 +253,7 @@ if __name__ == "__main__":
         "-w",
         "--workers",
         type=int,
-        default=10,
+        default=15,
         help="Number of worker tasks to run concurrently.",
     )
     parser.add_argument(
