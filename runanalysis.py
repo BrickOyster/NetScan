@@ -86,7 +86,7 @@ async def main(args):
     print(f"Start date: {start_date}, End date: {end_date}")
     total_results = {}
     for_precentage = [(0, 0)] * len(date_diff)  # (malicious, harmless)
-    for group in ["aggregate", "diff", "precentage"]:
+    for group in ["aggregate", "diff", "precentage", "diff_precentage"]:
         groups_encountaired[group] = len(groups_encountaired) + 1
         plt.figure(groups_encountaired[group], figsize=(19, 10))
         total_results[group] = [0] * len(date_diff)
@@ -216,11 +216,33 @@ async def main(args):
         total_results["precentage"] = [
             (m * 100.0 / (m + h) if m + h > 0 else 0) for m, h in for_precentage
         ]
+        total_results["diff_precentage"] = []
+        for i in range(len(date_diff)):
+            if i == 0:
+                total_results["diff_precentage"].append(0)
+            else:
+                prev_mal = total_results["aggregate"][i - 1]
+                prev_harmless = (
+                    for_precentage[i - 1][1]
+                    if i - 1 < len(for_precentage)
+                    else for_precentage[-1][1]
+                )
+                curr_mal = total_results["aggregate"][i]
+                curr_harmless = (
+                    for_precentage[i][1] if i < len(for_precentage) else for_precentage[-1][1]
+                )
+                diff_mal = curr_mal - prev_mal
+                diff_harmless = curr_harmless - prev_harmless
+                total_results["diff_precentage"].append(
+                    (diff_mal / (diff_mal + diff_harmless) if diff_mal + diff_harmless > 0 else 0)
+                )
 
     plt.figure(groups_encountaired["aggregate"])
     plt.plot(date_diff, total_results["aggregate"], marker="o")
     plt.figure(groups_encountaired["precentage"])
     plt.plot(date_diff, total_results["precentage"], marker="o")
+    plt.figure(groups_encountaired["diff_precentage"])
+    plt.plot(date_diff, total_results["diff_precentage"], marker="o")
     plt.figure(groups_encountaired["diff"])
     plt.plot(date_diff, total_results["diff"], marker="o")
 

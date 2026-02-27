@@ -145,7 +145,7 @@ async def worker(name, queue, writer, lock, args):
                 check_keys()
                 if args.debug:
                     print(
-                        f"{datetime.now().time()} | Worker #{name} processing {ip_port}",
+                        f"{datetime.now().time()} | Worker #{name} processing '{ip_port}'",
                         flush=True,
                     )
 
