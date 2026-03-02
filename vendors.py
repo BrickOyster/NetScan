@@ -159,12 +159,15 @@ async def cs_get_url_report(session, search_term, apikey, secret):
     url, port = search_term.split(":")
     testing = ""
     try:
-        headers = {"Accept": "application/json"}
-        auth = aiohttp.BasicAuth(apikey, secret)
+        headers = {
+            # "X-Organization-ID": apikey,
+            "Accept": "application/json",
+            "authorization": f"Bearer {secret}"
+        }
         async with session.get(
-            f"https://search.censys.io/api/v2/hosts/{url}",
+            f"https://api.platform.censys.io/v3/global/asset/host/{url}",
+            # f"https://api.platform.censys.io/v3/global/asset/webproperty/{url}%3A{port}",
             headers=headers,
-            auth=auth,
         ) as resp:
             testing = await resp.text()
             return await resp.json()
@@ -176,8 +179,8 @@ async def cs_get_url_report(session, search_term, apikey, secret):
 async def process_cs_report(cs_response, total_votes, report):
     try:
         if (
-            "labels" in cs_response["result"]
-            and "c2" in cs_response["result"]["labels"]
+            "labels" in cs_response["result"]["resource"]
+            and "c2" in cs_response["result"]["resource"]["labels"]
         ):
             report["Censys"] = {"category": "malicious"}
             total_votes["malicious"] = total_votes.get("malicious", 0) + 1
