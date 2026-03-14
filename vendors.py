@@ -178,15 +178,25 @@ async def cs_get_url_report(session, search_term, apikey, secret):
 
 async def process_cs_report(cs_response, total_votes, report):
     try:
-        if (
-            "labels" in cs_response["result"]["resource"]
-            and "c2" in cs_response["result"]["resource"]["labels"]
-        ):
-            report["Censys"] = {"category": "malicious"}
-            total_votes["malicious"] = total_votes.get("malicious", 0) + 1
-        else:
-            report["Censys"] = {"category": "harmless"}
-            total_votes["harmless"] = total_votes.get("harmless", 0) + 1
+        if "labels" in cs_response["result"]["resource"]:
+            for label in cs_response["result"]["resource"]["labels"]:
+                if "c2" in label["value"] or "c2" in label:
+                    print("Censys found c2 label. Houray!")
+                    report["Censys"] = {"category": "malicious"}
+                    total_votes["malicious"] = total_votes.get("malicious", 0) + 1
+                    total_votes["harmless"] = total_votes.get("harmless", 0) - 1
+                    return total_votes, report
+        if "services" in cs_response["result"]:
+            for service in cs_response["result"]["services"]:
+                for label in service["labels"]:
+                    if "c2" in label["value"] or "c2" in label:
+                        print("Censys found c2 label. Houray!")
+                        report["Censys"] = {"category": "malicious"}
+                        total_votes["malicious"] = total_votes.get("malicious", 0) + 1
+                        total_votes["harmless"] = total_votes.get("harmless", 0) - 1
+                        return total_votes, report
+        report["Censys"] = {"category": "harmless"}
+        total_votes["harmless"] = total_votes.get("harmless", 0) + 1
     except Exception as e:
         print(f"\nAn error occurred while processing Censys report: {e}\n{cs_response}")
     finally:

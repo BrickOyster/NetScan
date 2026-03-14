@@ -86,6 +86,7 @@ async def main(args):
     print(f"Start date: {start_date}, End date: {end_date}")
     total_results = {}
     for_precentage = [(0, 0)] * len(date_diff)  # (malicious, harmless)
+    for_diff = [(0, 0)] * len(date_diff)  # (plus, minus)
     for group in ["aggregate", "diff", "precentage", "diff_precentage"]:
         groups_encountaired[group] = len(groups_encountaired) + 1
         plt.figure(groups_encountaired[group], figsize=(19, 10))
@@ -200,9 +201,18 @@ async def main(args):
                     if int_day_diff == 0:
                         total_results["diff"][int_day_diff] += 0
                     else:
-                        total_results["diff"][int_day_diff] += (
-                            malicious_votes[d_idx] - malicious_votes[d_idx - 1]
-                        )
+                        value_diff = malicious_votes[d_idx] - malicious_votes[d_idx - 1]
+                        total_results["diff"][int_day_diff] += ( value_diff)
+                        if value_diff > 0:
+                            for_diff[int_day_diff] = (
+                                for_diff[int_day_diff][0] + value_diff,
+                                for_diff[int_day_diff][1],
+                            )
+                        elif value_diff < 0:
+                            for_diff[int_day_diff] = (
+                                for_diff[int_day_diff][0],
+                                for_diff[int_day_diff][1] - value_diff,
+                            )
                     if malicious_votes[d_idx] > 0:
                         for_precentage[int_day_diff] = (
                             for_precentage[int_day_diff][0] + 1,
@@ -216,35 +226,37 @@ async def main(args):
         total_results["precentage"] = [
             (m * 100.0 / (m + h) if m + h > 0 else 0) for m, h in for_precentage
         ]
-        total_results["diff_precentage"] = []
-        for i in range(len(date_diff)):
-            if i == 0:
-                total_results["diff_precentage"].append(0)
-            else:
-                prev_mal = total_results["aggregate"][i - 1]
-                prev_harmless = (
-                    for_precentage[i - 1][1]
-                    if i - 1 < len(for_precentage)
-                    else for_precentage[-1][1]
-                )
-                curr_mal = total_results["aggregate"][i]
-                curr_harmless = (
-                    for_precentage[i][1] if i < len(for_precentage) else for_precentage[-1][1]
-                )
-                diff_mal = curr_mal - prev_mal
-                diff_harmless = curr_harmless - prev_harmless
-                total_results["diff_precentage"].append(
-                    (diff_mal / (diff_mal + diff_harmless) if diff_mal + diff_harmless > 0 else 0)
-                )
+        total_results["diff_precentage"] = [0] + [
+            (for_diff[i][0] - for_diff[i][1]) * 100.0
+            / (total_results["aggregate"][i - 1])
+            if total_results["aggregate"][i - 1] != 0
+            else 0
+            for i in range(1, len(for_diff))
+        ]
 
     plt.figure(groups_encountaired["aggregate"])
     plt.plot(date_diff, total_results["aggregate"], marker="o")
     plt.figure(groups_encountaired["precentage"])
     plt.plot(date_diff, total_results["precentage"], marker="o")
-    plt.figure(groups_encountaired["diff_precentage"])
-    plt.plot(date_diff, total_results["diff_precentage"], marker="o")
     plt.figure(groups_encountaired["diff"])
     plt.plot(date_diff, total_results["diff"], marker="o")
+    plt.plot(date_diff, [x[0] for x in for_diff], marker="o", label="Plus")
+    plt.plot(date_diff, [-x[1] for x in for_diff], marker="o", label="Minus")
+    plt.legend()
+    plt.figure(groups_encountaired["diff_precentage"])
+    plt.plot(date_diff, total_results["diff_precentage"], marker="o")
+    diff_precentage_plus = [0] + [
+        (for_diff[i][0] * 100.0 / total_results["aggregate"][i - 1]) if total_results["aggregate"][i - 1] != 0 else 0
+        for i in range(1, len(for_diff))
+    ]
+    plt.plot(date_diff, diff_precentage_plus, marker="o", label="Plus")
+    diff_precentage_minus = [0] + [
+        -(for_diff[i][1] * 100.0 / total_results["aggregate"][i - 1]) if total_results["aggregate"][i - 1] != 0 else 0
+        for i in range(1, len(for_diff))
+    ]
+    plt.plot(date_diff, diff_precentage_minus, marker="o", label="Minus")
+    plt.legend()
+    
 
     with open(f"{args.output}out_logs.txt", "a") as f:
         f.write(f"\n\nOff day one count: {off_day_one}")

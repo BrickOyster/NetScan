@@ -199,6 +199,7 @@ async def main(args):
 
         date = datetime.now().strftime("%Y-%m-%d_%H_%M_%S")
         OUTPUT_FILE = f"{file.removesuffix('.csv')}/report_{date}.csv"
+        print(f"Output file: {OUTPUT_FILE}")
         if not os.path.exists(file.removesuffix(".csv")):
             os.mkdir(file.removesuffix(".csv"))
 
