@@ -2,8 +2,6 @@
 
 ## Παρακολούθηση της διάρκειας ζωής κακώβουλων δεικτών σε ροές πληροφοριών για δημόσιες απειλές
 
-## Summary
-
 ## Περίληψη
 
 ## Abstract
@@ -73,8 +71,6 @@ Each group examined consists of approximately 2400 IP addresses that have been r
 Subsequently, for data analysis, all generated CSV files are read to count the necessary fields and extract IP addresses. Useful graphs include the percentage of malicious addresses per day and the increase or decrease of malicious addresses per day.
 
 ## Results
-
-## Discussion
 
 ## Conclusion
 

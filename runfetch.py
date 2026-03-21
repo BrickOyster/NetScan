@@ -109,7 +109,7 @@ def check_keys():
 async def quota_worker(args):
     left_day = 100
     while left_day != 0:
-        await asyncio.sleep(4 * WAITING_TIME)
+        await asyncio.sleep(10 * WAITING_TIME)
         vt_quota = await check_vt_quota(key_in_use["VIRUSTOTAL"])
         allowed_day = vt_quota["api_requests_daily"]["user"]["allowed"]
         left_day = allowed_day - vt_quota["api_requests_daily"]["user"]["used"]

@@ -61,6 +61,10 @@ async def vt_scan_ip(session, search_term, apikey):
             print("VirusTotal too many requests")
             await asyncio.sleep(2 * WAITING_TIME)
             return await vt_scan_ip(session, search_term, apikey)
+        if testing.find("QuotaExceededError") != -1:
+            print("VirusTotal quota exceeded")
+            await asyncio.sleep(5 * WAITING_TIME)
+            return {}
         if f"{e}".startswith("Cannot connect to host"):
             print("Lost connection")
             while not await check_connection():
