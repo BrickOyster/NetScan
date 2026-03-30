@@ -62,7 +62,7 @@ async def vt_scan_ip(session, search_term, apikey):
             await asyncio.sleep(2 * WAITING_TIME)
             return await vt_scan_ip(session, search_term, apikey)
         if testing.find("QuotaExceededError") != -1:
-            print("VirusTotal quota exceeded")
+            print(f"VirusTotal quota exceeded ({search_term})")
             await asyncio.sleep(5 * WAITING_TIME)
             return {}
         if f"{e}".startswith("Cannot connect to host"):
@@ -88,13 +88,23 @@ async def vt_get_ip_analysis(session, id, apikey):
         while response["attributes"]["status"] != "completed":
             if response["attributes"]["status"] == "unspecified":
                 return response  # Panic return
-            await asyncio.sleep(WAITING_TIME)
+            if response["attributes"]["status"] == "queued":
+                print(f"VT analysis status: queued. Waiting for {5 * WAITING_TIME} seconds before retrying...", flush=True)
+                await asyncio.sleep(5 * WAITING_TIME)
+            elif response["attributes"]["status"] == "in-progress":
+                print(f"VT analysis status: in-progress. Waiting for {WAITING_TIME} seconds before retrying...", flush=True)
+                await asyncio.sleep(WAITING_TIME)
+            else:
+                print(f"VT analysis status: {response['attributes']['status']}. Waiting for {WAITING_TIME} seconds before retrying...", flush=True)
+                await asyncio.sleep(WAITING_TIME)
             async with session.get(
                 f"https://www.virustotal.com/api/v3/analyses/{id}", headers=headers
             ) as resp:
                 data = await resp.json()
                 response = data["data"]
             request_num += 1
+        if request_num > 5:
+            print(f"VT tries {request_num} requests.")
         return response
     except Exception as e:
         print(f"\nAn error occurred for vt_id {id}: {e}")
@@ -176,7 +186,10 @@ async def cs_get_url_report(session, search_term, apikey, secret):
             testing = await resp.text()
             return await resp.json()
     except Exception as e:
-        print(f"\nAn error occurred for cs_url {search_term}: \n{e} \n{testing}")
+        if "insufficient balance" in f"{e}":
+            print(f"Censys quota exceeded ({search_term})")
+        else:
+            print(f"\nAn error occurred for cs_url {search_term}: \n{e} \n{testing}")
         return {}
 
 
