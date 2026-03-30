@@ -1,4 +1,6 @@
-import aiohttp, asyncio, socket, requests, re
+import asyncio
+import socket
+import requests
 
 WAITING_TIME = 32
 
@@ -8,7 +10,7 @@ async def check_connection():
         # Attempt to connect to a well-known host (Google's public DNS)
         socket.create_connection(("8.8.8.8", 53), timeout=5)
         return True
-    except Exception as e:
+    except Exception:
         return False
 
 
@@ -63,7 +65,7 @@ async def vt_scan_ip(session, search_term, apikey):
             return await vt_scan_ip(session, search_term, apikey)
         if testing.find("QuotaExceededError") != -1:
             print(f"VirusTotal quota exceeded ({search_term})")
-            await asyncio.sleep(5 * WAITING_TIME)
+            await asyncio.sleep(4 * WAITING_TIME)
             return {}
         if f"{e}".startswith("Cannot connect to host"):
             print("Lost connection")
@@ -86,16 +88,17 @@ async def vt_get_ip_analysis(session, id, apikey):
     try:
         headers = {"accept": "application/json", "x-apikey": apikey}
         while response["attributes"]["status"] != "completed":
-            if response["attributes"]["status"] == "unspecified":
+            res_status = response["attributes"]["status"]
+            if res_status == "unspecified":
                 return response  # Panic return
-            if response["attributes"]["status"] == "queued":
+            if res_status == "queued":
                 print(f"VT analysis status: queued. Waiting for {5 * WAITING_TIME} seconds before retrying...", flush=True)
                 await asyncio.sleep(5 * WAITING_TIME)
-            elif response["attributes"]["status"] == "in-progress":
+            elif res_status == "in-progress":
                 print(f"VT analysis status: in-progress. Waiting for {WAITING_TIME} seconds before retrying...", flush=True)
                 await asyncio.sleep(WAITING_TIME)
             else:
-                print(f"VT analysis status: {response['attributes']['status']}. Waiting for {WAITING_TIME} seconds before retrying...", flush=True)
+                print(f"VT analysis status: {res_status}. Waiting for {WAITING_TIME} seconds before retrying...", flush=True)
                 await asyncio.sleep(WAITING_TIME)
             async with session.get(
                 f"https://www.virustotal.com/api/v3/analyses/{id}", headers=headers
@@ -297,7 +300,6 @@ def fetch_openphish():
     Fetches the list of phishing URLs from OpenPhish and returns them as a list of strings.
     """
     url = "https://raw.githubusercontent.com/openphish/public_feed/refs/heads/main/feed.txt"
-    test = ""
     missed = 0
     try:
         response = requests.get(url, timeout=10)
@@ -312,7 +314,7 @@ def fetch_openphish():
             try:
                 ip = socket.gethostbyname_ex(domain)[2]
                 ips.extend(ip)
-            except Exception as e:
+            except Exception:
                 missed += 1
         return ips, missed
     except requests.RequestException as e:

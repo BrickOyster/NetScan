@@ -1,4 +1,8 @@
-import os, glob, argparse, csv, asyncio, aiohttp
+import os
+import glob
+import argparse
+import csv
+import asyncio
 from datetime import datetime, date, timedelta
 import matplotlib.pyplot as plt
 
@@ -202,7 +206,7 @@ async def main(args):
                         total_results["diff"][int_day_diff] += 0
                     else:
                         value_diff = malicious_votes[d_idx] - malicious_votes[d_idx - 1]
-                        total_results["diff"][int_day_diff] += ( value_diff)
+                        total_results["diff"][int_day_diff] += value_diff
                         if value_diff > 0:
                             for_diff[int_day_diff] = (
                                 for_diff[int_day_diff][0] + value_diff,
@@ -256,7 +260,6 @@ async def main(args):
     ]
     plt.plot(date_diff, diff_precentage_minus, marker="o", label="Minus")
     plt.legend()
-    
 
     with open(f"{args.output}out_logs.txt", "a") as f:
         f.write(f"\n\nOff day one count: {off_day_one}")
