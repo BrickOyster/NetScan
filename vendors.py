@@ -92,8 +92,8 @@ async def vt_get_ip_analysis(session, id, apikey):
             if res_status == "unspecified":
                 return response  # Panic return
             if res_status == "queued":
-                print(f"VT analysis status: queued. Waiting for {5 * WAITING_TIME} seconds before retrying...", flush=True)
-                await asyncio.sleep(5 * WAITING_TIME)
+                print(f"VT analysis status: queued. Waiting for {4 * WAITING_TIME} seconds before retrying...", flush=True)
+                await asyncio.sleep(4 * WAITING_TIME)
             elif res_status == "in-progress":
                 print(f"VT analysis status: in-progress. Waiting for {WAITING_TIME} seconds before retrying...", flush=True)
                 await asyncio.sleep(WAITING_TIME)
@@ -110,7 +110,7 @@ async def vt_get_ip_analysis(session, id, apikey):
             print(f"VT tries {request_num} requests.")
         return response
     except Exception as e:
-        print(f"\nAn error occurred for vt_id {id}: {e}")
+        print(f"\nAn error occurred for vt_id {id}: {e}\n{response}")
 
 
 async def process_vt_report(vt_response, total_votes, report):
