@@ -6,8 +6,6 @@
 
 ## Abstract
 
---
-
 ## Introduction
 
 The Internet is a fundamental tool for communication, information sharing and business activities worldwide. However, this widespread use has led to increased cyber threats such as malware, phishing and DDoS attacks. To combat these threats, public threat intelligence feeds have been developed, such as VirusTotal, Censys, and AbuseIPDB, ThreatFox, OpenPhish and Cinsscore which collect and share malicious indicators such as IP addresses, domains and file hashes.
@@ -18,9 +16,33 @@ However, there are disadvantages: Reliance on public data can lead to false posi
 
 The purpose of this study is to investigate the lifetime of malicious indicators in these public threat intelligence feeds, and how long someone is vulnerable using such providers. In our research we collect data from the Tlscope tool and compare the results with other vendors to figure out how earlier Tlscope detects them. This analysis will contribute to a better understanding of the effectiveness of Threat Intelligence Feeds and the improvement of cybersecurity strategies as well as the development of more effective tools similar to those of public providers.
 
-## Related Work
+## Related Work: Papers on Malicious Indicators and Threat Intelligence
 
--- TODO: Search for related work and add it here --
+### NDSS 2025
+
+- **Density Boosts Everything: A One-stop Strategy for Improving Performance, Robustness, and Sustainability of Malware Detectors** - <https://www.ndss-symposium.org/ndss-paper/density-boosts-everything-a-one-stop-strategy-for-improving-performance-robustness-and-sustainability-of-malware-detectors/>
+- **Revisiting Concept Drift in Windows Malware Detection: Adaptation to Real Drifted Malware with Minimal Samples** - <https://www.ndss-symposium.org/ndss-paper/revisiting-concept-drift-in-windows-malware-detection-adaptation-to-real-drifted-malware-with-minimal-samples/>
+<!-- - **Detecting Ransomware Despite I/O Overhead: A Practical Multi-Staged Approach** - <https://www.ndss-symposium.org/ndss-paper/detecting-ransomware-despite-i-o-overhead-a-practical-multi-staged-approach/> -->
+
+### NDSS 2024
+
+- **Low-Quality Training Data Only? A Robust Framework for Detecting Encrypted Malicious Network Traffic** - <https://www.ndss-symposium.org/ndss-paper/low-quality-training-data-only-a-robust-framework-for-detecting-encrypted-malicious-network-traffic/>
+
+### USENIX Security 2024 (Fall)
+
+- **6Sense: Internet-Wide IPv6 Scanning and its Security Applications** - <https://www.usenix.org/conference/usenixsecurity24/presentation/williams>
+- **Learning with Semantics: Towards a Semantics-Aware Routing Anomaly Detection System** - <https://www.usenix.org/conference/usenixsecurity24/presentation/chen-yihao>
+- **CalcuLatency: Leveraging Cross-Layer Network Latency Measurements to Detect Proxy-Enabled Abuse** - <https://www.usenix.org/conference/usenixsecurity24/presentation/ramesh>
+- **Rethinking the Security Threats of Stale DNS Glue Records** - <https://www.usenix.org/conference/usenixsecurity24/presentation/zhang-yunyi-rethinking>
+
+### USENIX Security 2024 (Summer)
+
+- **ResolverFuzz: Automated Discovery of DNS Resolver Vulnerabilities with Query-Response Fuzzing** - <https://www.usenix.org/conference/usenixsecurity24/presentation/zhang-qifan>
+- **Atropos: Effective Fuzzing of Web Applications for Server-Side Vulnerabilities** - <https://www.usenix.org/conference/usenixsecurity24/presentation/güler>
+
+### IEEE S&P 2025
+
+- **MANTIS: Detection of Zero-Day Malicious Domains Leveraging Low Reputed Hosting Infrastructure** - <https://sp2025.ieee-security.org/accepted-papers.html>
 
 ## Limitations
 

@@ -93,6 +93,7 @@ async def compile_total_results(results, all_zero_writer, non_zero_writer, args)
     """
     total_figures = defaultdict(lambda: len(total_figures) + 1)
     total_statistics = {
+        "# Total Stats": "----------------",
         "Total IP": 0,
         "All zero votes": 0,
         "Non zero first day": 0,
@@ -257,36 +258,52 @@ async def compile_report_results(results, args):
 
     - results: dict[str, list[tuple[date_str, report_dict]]]
     - report_dict: per engine result dict, e.g. {'Acronis': {...}, ...}
+    - report_results: dict mapping engine names to their malicious percentage over time and other stats
     """
     report_figures = defaultdict(lambda: len(report_figures) + 20)
-    report_stats = {}
+    report_stats = {
+        "Report Stats": "----------------"
+    }
     report_results = {}
 
     vendor_date_counts = defaultdict(lambda: [0] * len(args.date_diff))
     vendor_date_malicious = defaultdict(lambda: [0] * len(args.date_diff))
+    id_indicator_limetime = defaultdict(lambda: defaultdict(int))
 
     for identifier, samples in results.items():
-        id_detected = defaultdict(int)
+        id_not_detected = defaultdict(int)
         id_expired = set()
+        samples = sorted(samples, key=lambda x: x[0])  # Sort by date
+
         for report_date, report_data in samples:
             day_diff = (datetime.fromisoformat(report_date).date() - args.start_date).days
             int_day_diff = day_diff // args.day_diff
             for engine_name, engine_result in report_data.items():
                 vendor_date_counts[engine_name][int_day_diff] += 1
+                if engine_name in id_expired:
+                    continue
 
                 category = str(engine_result.get('category', '')).strip().lower()
-                if category in ('malicious', 'suspicious') and engine_name not in id_expired:
+                if category in ('malicious', 'suspicious'):
                     vendor_date_malicious[engine_name][int_day_diff] += 1
-                    id_detected[engine_name] = 0
+                    id_indicator_limetime[engine_name][identifier] += args.day_diff
+                    id_not_detected[engine_name] = 0
                 else:
-                    if engine_name in id_detected:
-                        id_detected[engine_name] += 1
-                        if id_detected[engine_name] >= 2:  # Consider expired after 2 non-detections
-                            id_expired.add(engine_name)
+                    if engine_name not in id_not_detected:
+                        continue
+                    id_indicator_limetime[engine_name][identifier] += args.day_diff
+                    id_not_detected[engine_name] += 1
+                    if id_not_detected[engine_name] >= 2:  # Consider expired after 2 non-detections
+                        id_indicator_limetime[engine_name][identifier] -= args.day_diff
+                        id_expired.add(engine_name)
 
     for engine_name in vendor_date_counts:
         counts = vendor_date_counts[engine_name]
         malicious_counts = vendor_date_malicious[engine_name]
+        average_lifetime = (
+            sum(id_indicator_limetime[engine_name].values()) / len(id_indicator_limetime[engine_name])
+            if id_indicator_limetime[engine_name] else 0
+        )
         percentages = [
             (malicious_counts[i] * 100.0 / counts[i]) if counts[i] > 0 else 0
             for i in range(len(counts))
@@ -294,6 +311,7 @@ async def compile_report_results(results, args):
         report_results[engine_name] = {
             "counts": counts,
             "malicious_counts": malicious_counts,
+            "average_lifetime": average_lifetime,
             "percentages": percentages,
         }
 
@@ -312,20 +330,14 @@ async def compile_report_results(results, args):
         plt.title(f"{engine_name} Malicious Reports Over Time")
         plt.xticks(rotation=45)
 
+        report_stats["Average Lifetime " + engine_name] = data["average_lifetime"]
+        report_stats["Max Percentage " + engine_name] = max(data["percentages"])
+
     return report_stats, report_figures, report_results
 
 
 async def main(args):
     start_time = datetime.now()
-    args.start_date = datetime.fromisoformat(
-        sorted(args.start_dates.items(), key=lambda item: item[1])[0][1]
-    ).date()
-    args.end_date = datetime.fromisoformat(
-        sorted(args.end_dates.items(), key=lambda item: item[1])[-1][1]
-    ).date()
-    args.date_diff = [
-        f"+{i}" for i in range(0, (args.end_date - args.start_date).days + 1, args.day_diff)
-    ]
     print(f"Running analysis for {args.file_num} files from {args.folder} ...")
     print(f"Start date: {args.start_date}, End date: {args.end_date}")
 
@@ -345,6 +357,7 @@ async def main(args):
             f"{args.output}out_logs.txt", "a", encoding="utf-8"
         ) as stat_file,
     ):
+        stat_file.write(f"Analysis started with args {args}\n")
         fieldnames = ["IP", "Port"]
         all_zero_writer = csv.DictWriter(all_zero, fieldnames=fieldnames)
         all_zero_writer.writeheader()
@@ -379,7 +392,7 @@ async def main(args):
     print(f"All files processed in {(datetime.now() - start_time).seconds}s.")
 
 
-if __name__ == "__main__":
+def parse_args():
     parser = argparse.ArgumentParser(description="Run analysis on ip data.")
     parser.add_argument(
         "-f", "--folder", required=True, help="Input file containing IP data"
@@ -439,4 +452,19 @@ if __name__ == "__main__":
     args.files = files
     args.file_num = len(files)
 
+    args.start_date = datetime.fromisoformat(
+        sorted(args.start_dates.items(), key=lambda item: item[1])[0][1]
+    ).date()
+    args.end_date = datetime.fromisoformat(
+        sorted(args.end_dates.items(), key=lambda item: item[1])[-1][1]
+    ).date()
+    args.date_diff = [
+        f"+{i}" for i in range(0, (args.end_date - args.start_date).days + 1, args.day_diff)
+    ]
+
+    return args
+
+
+if __name__ == "__main__":
+    args = parse_args()
     asyncio.run(main(args))
