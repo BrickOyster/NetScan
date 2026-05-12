@@ -1,0 +1,24 @@
+{
+  "[python]": {
+    "editor.formatOnSave": true,
+    "editor.defaultFormatter": "charliermarsh.ruff",
+    "editor.codeActionsOnSave": {
+      "source.fixAll.ruff": "explicit",
+      "source.organizeImports.ruff": "explicit"
+    }
+  },
+  "ruff.format.preview": true,
+  "ruff.organizeImports": true,
+  "ruff.lineLength": 120,
+  "ruff.lint.enable": true,
+  "ruff.lint.select": ["ALL"],
+  "ruff.lint.ignore": [
+    "BLE001",
+    "CPY001",
+    "ANN001",
+    "ANN201",
+    "D103",
+    "D100",
+    "E302"
+  ]
+}

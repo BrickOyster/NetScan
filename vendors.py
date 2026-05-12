@@ -1,31 +1,43 @@
 import asyncio
 import socket
+from datetime import datetime
+
 import requests
 
 WAITING_TIME = 32
+MALICIOUS_CONFIDENSE_THRESHOLD = 0.25
+SUSPICIOUS_CONFIDENSE_THRESHOLD = 0.15
 
 
-async def check_connection():
-    try:
-        # Attempt to connect to a well-known host (Google's public DNS)
-        socket.create_connection(("8.8.8.8", 53), timeout=5)
-        return True
-    except Exception:
-        return False
+def wait_for_connection():
+    while True:
+        try:
+            # Attempt to connect to a well-known host (Google's public DNS)
+            socket.create_connection(("8.8.8.8", 53), timeout=5)
+        except TimeoutError:  # noqa: PERF203
+            pass
+        else:
+            return True
 
 
-async def check_vt_quota(apikey):
+def info_print(text):
+    timezone = datetime.now().astimezone().tzinfo
+    print(f"{datetime.now(tz=timezone).time()} | {text}", flush=True)  # noqa: T201
+
+
+async def check_vt_quota(session, apikey):
     headers = {"x-apikey": apikey, "accept": "application/json"}
 
     quota_url = "https://www.virustotal.com/api/v3/users/" + apikey + "/overall_quotas"
     quota_resp = {}
     try:
-        quota_resp = requests.get(quota_url, headers=headers).json()
-        daily = quota_resp["data"]["api_requests_daily"]
-        hourly = quota_resp["data"]["api_requests_hourly"]
-        return {"api_requests_daily": daily, "api_requests_hourly": hourly}
+        async with session.get(quota_url, headers=headers) as resp:
+            quota_resp = await resp.json()
+            daily = quota_resp["data"]["api_requests_daily"]
+            hourly = quota_resp["data"]["api_requests_hourly"]
+            return {"api_requests_daily": daily, "api_requests_hourly": hourly}
     except Exception as e:
-        print(f"Error while retrieving quota {e} \n {quota_resp}")
+        info_print(f"Error while retrieving quota {e} \n {quota_resp}")
         if quota_resp.get("error", {}).get("code", "") == "QuotaExceededError":
             return {
                 "api_requests_daily": {"user": {"allowed": 500, "used": 500}},
@@ -39,11 +51,7 @@ async def check_vt_quota(apikey):
 
 
 async def vt_scan_ip(session, search_term, apikey):
-    """
-    Submits an IP for scanning on VirusTotal.
-    request: https://docs.virustotal.com/reference/rescan-ip
-    """
-    ip, port = search_term.split(":")
+    ip, _ = search_term.split(":")
     testing = ""
     try:
         headers = {
@@ -60,30 +68,26 @@ async def vt_scan_ip(session, search_term, apikey):
             return await vt_get_ip_analysis(session, data["data"]["id"], apikey)
     except Exception as e:
         if testing.find("Too Many Requests") != -1:
-            print("VirusTotal too many requests")
+            info_print("VirusTotal too many requests")
             await asyncio.sleep(2 * WAITING_TIME)
             return await vt_scan_ip(session, search_term, apikey)
         if testing.find("QuotaExceededError") != -1:
-            print(f"VirusTotal quota exceeded ({search_term})")
+            info_print(f"VirusTotal quota exceeded ({search_term})")
             await asyncio.sleep(4 * WAITING_TIME)
             return {}
         if f"{e}".startswith("Cannot connect to host"):
-            print("Lost connection")
-            while not await check_connection():
-                await asyncio.sleep(WAITING_TIME)
-            print("Connection restored")
+            info_print("Lost connection")
+            wait_for_connection()
+            info_print("Connection restored")
             await asyncio.sleep(WAITING_TIME)
             return await vt_scan_ip(session, search_term, apikey)
-        print(f"\nAn error occurred for vt_url {search_term}: \n{e} \n{testing}")
+        info_print(f"\nAn error occurred for vt_url {search_term}: \n{e} \n{testing}")
         return {}
 
 
-async def vt_get_ip_analysis(session, id, apikey):
-    """
-    Fetches the URL analysis from VirusTotal.
-    request: https://docs.virustotal.com/reference/url
-    """
+async def vt_get_ip_analysis(session, analysis_id, apikey):
     request_num = 0
+    report_after = 5
     response = {"attributes": {"status": "not_completed"}}
     try:
         headers = {"accept": "application/json", "x-apikey": apikey}
@@ -92,46 +96,41 @@ async def vt_get_ip_analysis(session, id, apikey):
             if res_status == "unspecified":
                 return response  # Panic return
             if res_status == "queued":
-                print(f"VT analysis status: queued. Waiting for {4 * WAITING_TIME} seconds before retrying...", flush=True)
+                info_print(f"VT queued. Waiting for {4 * WAITING_TIME} seconds before retrying...")
                 await asyncio.sleep(4 * WAITING_TIME)
             elif res_status == "in-progress":
-                print(f"VT analysis status: in-progress. Waiting for {WAITING_TIME} seconds before retrying...", flush=True)
+                info_print(f"VT in-progress. Waiting for {WAITING_TIME} seconds before retrying...")
                 await asyncio.sleep(WAITING_TIME)
             else:
-                print(f"VT analysis status: {res_status}. Waiting for {WAITING_TIME} seconds before retrying...", flush=True)
+                info_print(f"VT {res_status}. Waiting for {WAITING_TIME} seconds before retrying...")
                 await asyncio.sleep(WAITING_TIME)
             async with session.get(
-                f"https://www.virustotal.com/api/v3/analyses/{id}", headers=headers
+                f"https://www.virustotal.com/api/v3/analyses/{analysis_id}",
+                headers=headers,
             ) as resp:
                 data = await resp.json()
                 response = data["data"]
             request_num += 1
-        if request_num > 5:
-            print(f"VT tries {request_num} requests.")
-        return response
+        if request_num > report_after:
+            info_print(f"VT tries {request_num} requests.")
     except Exception as e:
-        print(f"\nAn error occurred for vt_id {id}: {e}\n{response}")
+        info_print(f"\nAn error occurred for vt_id {analysis_id}: {e}\n{response}")
+    else:
+        return response
 
 
-async def process_vt_report(vt_response, total_votes, report):
+async def process_vt_report(vt_response, total_votes, report):  # noqa: RUF029
     try:
         report.update(vt_response["attributes"]["results"])
         for key, value in vt_response["attributes"]["stats"].items():
             total_votes[key] = total_votes.get(key, 0) + value
     except Exception as e:
-        print(
-            f"\nAn error occurred while processing VirusTotal report: {e}\n{vt_response}"
-        )
-    finally:
-        return total_votes, report
+        info_print(f"\nAn error occurred while processing VirusTotal report: {e}\n{vt_response}")
+    return total_votes, report
 
 
 async def ai_get_url_report(session, search_term, apikey):
-    """
-    Fetches the URL report from AbuseIPDB.
-    request: https://docs.abuseipdb.com/?python#check-endpoint
-    """
-    url, port = search_term.split(":")
+    url, _ = search_term.split(":")
     testing = ""
     try:
         querystring = {"ipAddress": url, "maxAgeInDays": "30"}
@@ -142,66 +141,57 @@ async def ai_get_url_report(session, search_term, apikey):
             params=querystring,
         ) as resp:
             testing = await resp.text()
-            decodedResponse = await resp.json()
-            return decodedResponse["data"]
+            return (await resp.json())["data"]
     except Exception as e:
-        print(f"\nAn error occurred for ai_url {search_term}: \n{e} \n{testing}")
+        info_print(f"\nAn error occurred for ai_url {search_term}: \n{e} \n{testing}")
         return {}
 
 
-async def process_ai_report(ai_response, total_votes, report):
+async def process_ai_report(ai_response, total_votes, report):  # noqa: RUF029
     try:
-        if ai_response["abuseConfidenceScore"] > 25:
+        if ai_response["abuseConfidenceScore"] > MALICIOUS_CONFIDENSE_THRESHOLD * 100:
             report["AbuseIPDB"] = {"category": "malicious"}
             total_votes["malicious"] = total_votes.get("malicious", 0) + 1
-        elif ai_response["abuseConfidenceScore"] > 10:
+        elif ai_response["abuseConfidenceScore"] > SUSPICIOUS_CONFIDENSE_THRESHOLD * 100:
             report["AbuseIPDB"] = {"category": "suspicious"}
             total_votes["suspicious"] = total_votes.get("suspicious", 0) + 1
         else:
             report["AbuseIPDB"] = {"category": "harmless"}
             total_votes["harmless"] = total_votes.get("harmless", 0) + 1
     except Exception as e:
-        print(
-            f"\nAn error occurred while processing AbuseIPDB report: {e}\n{ai_response}"
-        )
-    finally:
-        return total_votes, report
+        info_print(f"\nAn error occurred while processing AbuseIPDB report: {e}\n{ai_response}")
+    return total_votes, report
 
 
-async def cs_get_url_report(session, search_term, apikey, secret):
-    """
-    Fetches the URL report from Censys.
-    request: https://
-    """
-    url, port = search_term.split(":")
+async def cs_get_url_report(session, search_term, _, secret):
+    url, _ = search_term.split(":")
     testing = ""
     try:
         headers = {
             # "X-Organization-ID": apikey,
             "Accept": "application/json",
-            "authorization": f"Bearer {secret}"
+            "authorization": f"Bearer {secret}",
         }
         async with session.get(
             f"https://api.platform.censys.io/v3/global/asset/host/{url}",
-            # f"https://api.platform.censys.io/v3/global/asset/webproperty/{url}%3A{port}",
             headers=headers,
         ) as resp:
             testing = await resp.text()
             return await resp.json()
     except Exception as e:
         if "insufficient balance" in f"{e}":
-            print(f"Censys quota exceeded ({search_term})")
+            info_print(f"Censys quota exceeded ({search_term})")
         else:
-            print(f"\nAn error occurred for cs_url {search_term}: \n{e} \n{testing}")
+            info_print(f"\nAn error occurred for cs_url {search_term}: \n{e} \n{testing}")
         return {}
 
 
-async def process_cs_report(cs_response, total_votes, report):
+async def process_cs_report(cs_response, total_votes, report):  # noqa: RUF029
     try:
         if "labels" in cs_response["result"]["resource"]:
             for label in cs_response["result"]["resource"]["labels"]:
                 if "c2" in label["value"] or "c2" in label:
-                    print("Censys found c2 label. Houray!")
+                    info_print("Censys found c2 label. Houray!")
                     report["Censys"] = {"category": "malicious"}
                     total_votes["malicious"] = total_votes.get("malicious", 0) + 1
                     total_votes["harmless"] = total_votes.get("harmless", 0) - 1
@@ -210,7 +200,7 @@ async def process_cs_report(cs_response, total_votes, report):
             for service in cs_response["result"]["services"]:
                 for label in service["labels"]:
                     if "c2" in label["value"] or "c2" in label:
-                        print("Censys found c2 label. Houray!")
+                        info_print("Censys found c2 label. Houray!")
                         report["Censys"] = {"category": "malicious"}
                         total_votes["malicious"] = total_votes.get("malicious", 0) + 1
                         total_votes["harmless"] = total_votes.get("harmless", 0) - 1
@@ -218,16 +208,11 @@ async def process_cs_report(cs_response, total_votes, report):
         report["Censys"] = {"category": "harmless"}
         total_votes["harmless"] = total_votes.get("harmless", 0) + 1
     except Exception as e:
-        print(f"\nAn error occurred while processing Censys report: {e}\n{cs_response}")
-    finally:
-        return total_votes, report
+        info_print(f"\nAn error occurred while processing Censys report: {e}\n{cs_response}")
+    return total_votes, report
 
 
 async def tf_search_ioc(session, search_term, apikey):
-    """
-    Searches ThreatFox (abuse.ch) for an IOC.
-    request: https://threatfox-api.abuse.ch/api/v1/
-    """
     testing = ""
     try:
         headers = {
@@ -248,11 +233,11 @@ async def tf_search_ioc(session, search_term, apikey):
             testing = await resp.text()
             return await resp.json()
     except Exception as e:
-        print(f"\nAn error occurred for tf_search {search_term}: \n{e} \n{testing}")
+        info_print(f"\nAn error occurred for tf_search {search_term}: \n{e} \n{testing}")
         return {}
 
 
-async def process_tf_report(tf_response, total_votes, report):
+async def process_tf_report(tf_response, total_votes, report):  # noqa: RUF029
     try:
         if tf_response["query_status"] == "no_result":
             report["ThreatFox"] = {"category": "harmless"}
@@ -261,31 +246,24 @@ async def process_tf_report(tf_response, total_votes, report):
             report["ThreatFox"] = {"category": "malicious"}
             total_votes["malicious"] = total_votes.get("malicious", 0) + 1
     except Exception as e:
-        print(
-            f"\nAn error occurred while processing ThreatFox report: {e}\n{tf_response}"
-        )
-    finally:
-        return total_votes, report
+        info_print(f"\nAn error occurred while processing ThreatFox report: {e}\n{tf_response}")
+    return total_votes, report
 
 
 def fetch_cinsscore():
-    """
-    Fetches the list of 'bad guy' IPs from cinsscore.com and returns them as a list of strings.
-    """
     url = "https://cinsscore.com/list/ci-badguys.txt"
     try:
         response = requests.get(url, timeout=10)
         response.raise_for_status()  # Raise an exception if the request failed
 
         # Use regex to extract all valid IPv4 addresses
-        ips = response.text.splitlines()
-        return ips
+        return response.text.splitlines()
     except requests.RequestException as e:
-        print(f"Error fetching IPs: {e}")
+        info_print(f"Error fetching IPs: {e}")
         return []
 
 
-async def process_cb_report(cb_responce, total_votes, report):
+async def process_cb_report(cb_responce, total_votes, report):  # noqa: RUF029
     if cb_responce:
         report["Cinsscore"] = {"category": "malicious"}
         total_votes["malicious"] = total_votes.get("malicious", 0) + 1
@@ -296,9 +274,6 @@ async def process_cb_report(cb_responce, total_votes, report):
 
 
 def fetch_openphish():
-    """
-    Fetches the list of phishing URLs from OpenPhish and returns them as a list of strings.
-    """
     url = "https://raw.githubusercontent.com/openphish/public_feed/refs/heads/main/feed.txt"
     missed = 0
     try:
@@ -316,17 +291,53 @@ def fetch_openphish():
                 ips.extend(ip)
             except Exception:
                 missed += 1
-        return ips, missed
     except requests.RequestException as e:
-        print(f"Error fetching URLs: {e}")
+        info_print(f"Error fetching URLs: {e}")
         return []
+    else:
+        return ips, missed
 
 
-async def process_op_report(op_response, total_votes, report):
+async def process_op_report(op_response, total_votes, report):  # noqa: RUF029
     if op_response:
         report["OpenPhish_pub"] = {"category": "malicious"}
         total_votes["malicious"] = total_votes.get("malicious", 0) + 1
     else:
         report["OpenPhish_pub"] = {"category": "harmless"}
         total_votes["harmless"] = total_votes.get("harmless", 0) + 1
+    return total_votes, report
+
+
+async def fetch_silentpush(session, search_term, apikey):
+    url, _ = search_term.split(":")
+    testing = ""
+    try:
+        headers = {
+            "Accept": "application/json",
+            "Authorization": f"Bearer {apikey}",
+        }
+        async with session.get(
+            f"https://api.silentpush.com/api/v1/merge-api/explore/ipv4/riskscore/{url}",
+            headers=headers,
+        ) as resp:
+            testing = await resp.text()
+            return await resp.json()
+    except Exception as e:
+        info_print(f"\nAn error occurred for silentpush {search_term}: \n{e} \n{testing}")
+        return {}
+
+
+async def process_sp_report(sp_response, total_votes, report):  # noqa: RUF029
+    try:
+        if sp_response.get("risk_score", 0) > MALICIOUS_CONFIDENSE_THRESHOLD * 100:
+            report["SilentPush"] = {"category": "malicious"}
+            total_votes["malicious"] = total_votes.get("malicious", 0) + 1
+        elif sp_response.get("risk_score", 0) > SUSPICIOUS_CONFIDENSE_THRESHOLD * 100:
+            report["SilentPush"] = {"category": "suspicious"}
+            total_votes["suspicious"] = total_votes.get("suspicious", 0) + 1
+        else:
+            report["SilentPush"] = {"category": "harmless"}
+            total_votes["harmless"] = total_votes.get("harmless", 0) + 1
+    except Exception as e:
+        info_print(f"\nAn error occurred while processing SilentPush report: {e}\n{sp_response}")
     return total_votes, report
