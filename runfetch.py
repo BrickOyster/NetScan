@@ -38,14 +38,14 @@ load_dotenv()
 cinsscore_list = fetch_cinsscore()
 
 
-async def cb_search_list(session, search_term, apikey):  # noqa: ARG001, RUF029
+async def cb_search_list(_session, search_term, _apikey):
     return cinsscore_list.count(search_term.split(":")[0])
 
 
 openphish_list, op_missed = fetch_openphish()
 
 
-async def op_search_list(session, search_term, apikey):  # noqa: ARG001, RUF029
+async def op_search_list(_session, search_term, _apikey):
     return openphish_list.count(search_term.split(":")[0])
 
 
@@ -222,7 +222,7 @@ async def main(args):
         info_print(f"Estimated time remaining: {remaining / 60:.1f}m.")
 
 
-if __name__ == "__main__":
+def parse_args():
     parser = argparse.ArgumentParser(description="Fetch URL reports.")
 
     parser.add_argument("-f", "--folder", required=True, help="Folder containing CSV files to process")
@@ -240,6 +240,11 @@ if __name__ == "__main__":
     args.files = files
     args.file_num = len(args.files)
 
+    return args
+
+
+if __name__ == "__main__":
+    args = parse_args()
     try:
         asyncio.run(main(args))
     except asyncio.CancelledError as e:

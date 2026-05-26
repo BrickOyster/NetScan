@@ -14,7 +14,7 @@ def wait_for_connection():
         try:
             # Attempt to connect to a well-known host (Google's public DNS)
             socket.create_connection(("8.8.8.8", 53), timeout=5)
-        except TimeoutError:  # noqa: PERF203
+        except TimeoutError:
             pass
         else:
             return True
@@ -119,7 +119,7 @@ async def vt_get_ip_analysis(session, analysis_id, apikey):
         return response
 
 
-async def process_vt_report(vt_response, total_votes, report):  # noqa: RUF029
+async def process_vt_report(vt_response, total_votes, report):
     try:
         report.update(vt_response["attributes"]["results"])
         for key, value in vt_response["attributes"]["stats"].items():
@@ -147,7 +147,7 @@ async def ai_get_url_report(session, search_term, apikey):
         return {}
 
 
-async def process_ai_report(ai_response, total_votes, report):  # noqa: RUF029
+async def process_ai_report(ai_response, total_votes, report):
     try:
         if ai_response["abuseConfidenceScore"] > MALICIOUS_CONFIDENSE_THRESHOLD * 100:
             report["AbuseIPDB"] = {"category": "malicious"}
@@ -163,7 +163,7 @@ async def process_ai_report(ai_response, total_votes, report):  # noqa: RUF029
     return total_votes, report
 
 
-async def cs_get_url_report(session, search_term, _, secret):
+async def cs_get_url_report(session, search_term, _apikey, secret):
     url, _ = search_term.split(":")
     testing = ""
     try:
@@ -186,7 +186,7 @@ async def cs_get_url_report(session, search_term, _, secret):
         return {}
 
 
-async def process_cs_report(cs_response, total_votes, report):  # noqa: RUF029
+async def process_cs_report(cs_response, total_votes, report):
     try:
         if "labels" in cs_response["result"]["resource"]:
             for label in cs_response["result"]["resource"]["labels"]:
@@ -237,7 +237,7 @@ async def tf_search_ioc(session, search_term, apikey):
         return {}
 
 
-async def process_tf_report(tf_response, total_votes, report):  # noqa: RUF029
+async def process_tf_report(tf_response, total_votes, report):
     try:
         if tf_response["query_status"] == "no_result":
             report["ThreatFox"] = {"category": "harmless"}
@@ -263,7 +263,7 @@ def fetch_cinsscore():
         return []
 
 
-async def process_cb_report(cb_responce, total_votes, report):  # noqa: RUF029
+async def process_cb_report(cb_responce, total_votes, report):
     if cb_responce:
         report["Cinsscore"] = {"category": "malicious"}
         total_votes["malicious"] = total_votes.get("malicious", 0) + 1
@@ -298,7 +298,7 @@ def fetch_openphish():
         return ips, missed
 
 
-async def process_op_report(op_response, total_votes, report):  # noqa: RUF029
+async def process_op_report(op_response, total_votes, report):
     if op_response:
         report["OpenPhish_pub"] = {"category": "malicious"}
         total_votes["malicious"] = total_votes.get("malicious", 0) + 1
@@ -327,7 +327,7 @@ async def fetch_silentpush(session, search_term, apikey):
         return {}
 
 
-async def process_sp_report(sp_response, total_votes, report):  # noqa: RUF029
+async def process_sp_report(sp_response, total_votes, report):
     try:
         if sp_response.get("risk_score", 0) > MALICIOUS_CONFIDENSE_THRESHOLD * 100:
             report["SilentPush"] = {"category": "malicious"}
