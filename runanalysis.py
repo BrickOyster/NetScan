@@ -307,6 +307,28 @@ async def compile_report_results(results, args):
         report_stats["Average Lifetime " + engine_name] = data["average_lifetime"]
         report_stats["Max Percentage " + engine_name] = max(data["percentages"])
 
+    engine_detected_sets = {eng: set(ids.keys()) for eng, ids in id_indicator_limetime.items()}
+    all_detected = set().union(*engine_detected_sets.values()) if engine_detected_sets else set()
+
+    detection_counts = defaultdict(int)
+    for ip in all_detected:
+        n = sum(1 for s in engine_detected_sets.values() if ip in s)
+        detection_counts[n] += 1
+    for k in sorted(detection_counts):
+        report_stats[f"IPs detected by exactly {k} provider(s)"] = detection_counts[k]
+
+    engines = sorted(engine_detected_sets.keys())
+    jaccard_indices = {}
+    for i, eng_a in enumerate(engines):
+        for eng_b in engines[i + 1 :]:
+            set_a, set_b = engine_detected_sets[eng_a], engine_detected_sets[eng_b]
+            union = set_a | set_b
+            jaccard = len(set_a & set_b) / len(union) if union else 0.0
+            jaccard_indices[(eng_a, eng_b)] = jaccard
+    
+    for (eng_a, eng_b), jaccard in sorted(jaccard_indices.items(), key=lambda x: x[1], reverse=True):
+        report_stats[f"RQ3 Jaccard({eng_a}, {eng_b})"] = round(jaccard, 4)
+
     return report_stats, report_figures, report_results
 
 
