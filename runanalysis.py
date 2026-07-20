@@ -325,7 +325,7 @@ async def compile_report_results(results, args):
             union = set_a | set_b
             jaccard = len(set_a & set_b) / len(union) if union else 0.0
             jaccard_indices[(eng_a, eng_b)] = jaccard
-    
+
     for (eng_a, eng_b), jaccard in sorted(jaccard_indices.items(), key=lambda x: x[1], reverse=True):
         report_stats[f"RQ3 Jaccard({eng_a}, {eng_b})"] = round(jaccard, 4)
 

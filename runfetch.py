@@ -11,6 +11,7 @@ import aiohttp
 from dotenv import load_dotenv
 
 from vendors import (
+    VIRUSTOTAL_RESET_TIME,
     WAITING_TIME,
     ai_get_url_report,
     check_vt_quota,
@@ -92,6 +93,8 @@ async def quota_worker(args):
         left_day = 100
         while left_day != 0:
             await asyncio.sleep(10 * WAITING_TIME)
+            if time.localtime().tm_hour == VIRUSTOTAL_RESET_TIME:
+                break
             vt_quota = await check_vt_quota(session, key_in_use["VIRUSTOTAL"])
             allowed_day = vt_quota["api_requests_daily"]["user"]["allowed"]
             left_day = allowed_day - vt_quota["api_requests_daily"]["user"]["used"]
