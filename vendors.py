@@ -110,7 +110,7 @@ async def vt_get_ip_analysis(session, analysis_id, apikey):
                 headers=headers,
             ) as resp:
                 data = await resp.json()
-                response = data["data"]
+                response = data.get("data", data)
             request_num += 1
         if request_num > report_after:
             info_print(f"VT tries {request_num} requests.")
