@@ -5,6 +5,7 @@
   },
   "ruff.lint.enable": true,
   "ruff.configuration": "pyproject.toml",
+  "python.analysis.typeCheckingMode": "basic",
   "latex-workshop.latex.tools": [
     {
       "name": "latexmk",

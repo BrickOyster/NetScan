@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import argparse
 import asyncio
 import csv
@@ -6,6 +7,7 @@ import pathlib
 import sys
 import time
 from pprint import pp
+from typing import Any
 
 import aiohttp
 from dotenv import load_dotenv
@@ -13,6 +15,8 @@ from dotenv import load_dotenv
 from vendors import (
     VIRUSTOTAL_RESET_TIME,
     WAITING_TIME,
+    Report,
+    TotalVotes,
     ai_get_url_report,
     check_vt_quota,
     # cs_get_url_report,
@@ -39,15 +43,15 @@ load_dotenv()
 cinsscore_list = fetch_cinsscore()
 
 
-async def cb_search_list(_session, search_term, _apikey):
-    return cinsscore_list.count(search_term.split(":")[0])
+async def cb_search_list(_session: aiohttp.ClientSession, search_term: str, _apikey: str) -> int:
+    return cinsscore_list.count(search_term.split(":", maxsplit=1)[0])
 
 
 openphish_list, op_missed = fetch_openphish()
 
 
-async def op_search_list(_session, search_term, _apikey):
-    return openphish_list.count(search_term.split(":")[0])
+async def op_search_list(_session: aiohttp.ClientSession, search_term: str, _apikey: str) -> int:
+    return openphish_list.count(search_term.split(":", maxsplit=1)[0])
 
 
 info_print(f"Loaded remote lists with {op_missed} missed items.")
@@ -87,7 +91,7 @@ key_in_use = {service: key.split("::")[0] for service, key in KEYS.items() if ke
 pp(key_in_use)
 
 
-async def quota_worker(args):
+async def quota_worker(args: argparse.Namespace) -> None:
     """Background task to monitor VT quota and cancel all tasks if quota is exceeded."""
     async with aiohttp.ClientSession() as session:
         left_day = 100
@@ -111,7 +115,13 @@ async def quota_worker(args):
         task.cancel("quota exceeded error")
 
 
-async def worker(name, queue, writer, lock, args):
+async def worker(
+    name: int,
+    queue: asyncio.Queue[str | None],
+    writer: csv.DictWriter[str],
+    lock: asyncio.Lock,
+    args: argparse.Namespace,
+) -> None:
     """Consumes IPs from queue, processes them, and writes results to CSV."""
     async with aiohttp.ClientSession() as session:
         while True:
@@ -126,9 +136,9 @@ async def worker(name, queue, writer, lock, args):
                     info_print(f"Worker #{name} processing '{ip_port}'")
 
             # Process the IP
-            total_votes = {}
-            report = {}
-            responses = {}
+            total_votes: TotalVotes = {}
+            report: Report = {}
+            responses: dict[str, Any] = {}
 
             for service_name, service_abbr in services.items():
                 if not key_in_use[service_name]:
@@ -160,7 +170,7 @@ async def worker(name, queue, writer, lock, args):
             await asyncio.sleep(WAITING_TIME)
 
 
-async def main(args):
+async def main(args: argparse.Namespace) -> None:
     info_print(f"Found {args.file_num} files.")
 
     if args.start_from:
@@ -170,15 +180,15 @@ async def main(args):
     quota_workers = None
     for idx, file in enumerate(args.files):
         info_print(f"Processing file {idx + 1}/{args.file_num}:{file}")
-        queue = asyncio.Queue(maxsize=args.queue_size)  # buffer size
+        queue: asyncio.Queue[str | None] = asyncio.Queue(maxsize=args.queue_size)  # buffer size
         lock = asyncio.Lock()
 
         date = datetime.now().strftime("%Y-%m-%d_%H_%M_%S")
         out_file = f"{file.removesuffix('.csv')}/report_{date}.csv"
         info_print(f"Output file: {out_file}")
-        pathlib.Path(file.removesuffix(".csv")).mkdir(exist_ok=True)  # noqa: ASYNC240
+        pathlib.Path(file.removesuffix(".csv")).mkdir(exist_ok=True)
 
-        with pathlib.Path(out_file).open("w", newline="", encoding="utf-8") as out_f:  # noqa: ASYNC230
+        with pathlib.Path(out_file).open("w", newline="", encoding="utf-8") as out_f:
             fieldnames = [
                 "IP",
                 "Port",
@@ -199,7 +209,7 @@ async def main(args):
             ]
 
             # Producer: read input CSV line by line
-            with pathlib.Path(file).open(newline="", encoding="utf-8") as in_f:  # noqa: ASYNC230
+            with pathlib.Path(file).open(newline="", encoding="utf-8") as in_f:
                 reader = csv.DictReader(in_f)
                 for row in reader:
                     if args.start_from:
@@ -225,7 +235,7 @@ async def main(args):
         info_print(f"Estimated time remaining: {remaining / 60:.1f}m.")
 
 
-def parse_args():
+def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Fetch URL reports.")
 
     parser.add_argument("-f", "--folder", required=True, help="Folder containing CSV files to process")

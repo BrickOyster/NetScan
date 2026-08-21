@@ -39,20 +39,24 @@ target-version = "py312"
 [tool.ruff.lint]
 select = ["ALL"]
 ignore = [
-    "BLE001",
-    "CPY001",
-    "ANN001",
-    "ANN201",
-    "D103",
-    "D100",
-    "D203",
-    "D213",
-    "C901",
-    "E302",
-    "PLR0914",
-    "PLR0912",
-    "PLR0915",
-    "RUF029"
+    "blind-except",
+    "missing-copyright-notice",
+    "missing-type-function-argument",
+    "missing-return-type-undocumented-public-function",
+    "undocumented-public-function",
+    "undocumented-public-module",
+    "incorrect-blank-line-before-class",
+    "multi-line-summary-second-line",
+    "complex-structure",
+    "blank-lines-top-level",
+    "too-many-locals",
+    "too-many-branches",
+    "too-many-statements",
+    "unused-async",
+    "missing-trailing-comma",
+    "print",
+    "glob",
+    "any-type"
 ]
 
 # Allow fix for all enabled rules (when `--fix`) is provided.

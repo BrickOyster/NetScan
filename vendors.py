@@ -1,7 +1,9 @@
 import asyncio
 import socket
 from datetime import datetime
+from typing import Any
 
+import aiohttp
 import requests
 
 WAITING_TIME = 32
@@ -9,8 +11,11 @@ MALICIOUS_CONFIDENSE_THRESHOLD = 0.25
 SUSPICIOUS_CONFIDENSE_THRESHOLD = 0.15
 VIRUSTOTAL_RESET_TIME = 3
 
+TotalVotes = dict[str, int]
+Report = dict[str, dict[str, Any]]
 
-def wait_for_connection():
+
+def wait_for_connection() -> bool:
     while True:
         try:
             # Attempt to connect to a well-known host (Google's public DNS)
@@ -21,12 +26,12 @@ def wait_for_connection():
             return True
 
 
-def info_print(text):
+def info_print(text: str) -> None:
     timezone = datetime.now().astimezone().tzinfo
-    print(f"{datetime.now(tz=timezone).time()} | {text}", flush=True)  # noqa: T201
+    print(f"{datetime.now(tz=timezone).time()} | {text}", flush=True)
 
 
-async def check_vt_quota(session, apikey):
+async def check_vt_quota(session: aiohttp.ClientSession, apikey: str) -> dict[str, Any]:
     headers = {"x-apikey": apikey, "accept": "application/json"}
 
     quota_url = "https://www.virustotal.com/api/v3/users/" + apikey + "/overall_quotas"
@@ -51,7 +56,7 @@ async def check_vt_quota(session, apikey):
         }
 
 
-async def vt_scan_ip(session, search_term, apikey):
+async def vt_scan_ip(session: aiohttp.ClientSession, search_term: str, apikey: str) -> dict[str, Any] | None:
     ip, _ = search_term.split(":")
     testing = ""
     try:
@@ -86,7 +91,7 @@ async def vt_scan_ip(session, search_term, apikey):
         return {}
 
 
-async def vt_get_ip_analysis(session, analysis_id, apikey):
+async def vt_get_ip_analysis(session: aiohttp.ClientSession, analysis_id: str, apikey: str) -> dict[str, Any] | None:
     request_num = 0
     report_after = 5
     response = {"attributes": {"status": "not_completed"}}
@@ -118,9 +123,12 @@ async def vt_get_ip_analysis(session, analysis_id, apikey):
         info_print(f"\nAn error occurred for vt_id {analysis_id}: {e}\n{response}")
     else:
         return response
+    return None
 
 
-async def process_vt_report(vt_response, total_votes, report):
+async def process_vt_report(
+    vt_response: dict[str, Any], total_votes: TotalVotes, report: Report
+) -> tuple[TotalVotes, Report]:
     try:
         report.update(vt_response["attributes"]["results"])
         for key, value in vt_response["attributes"]["stats"].items():
@@ -130,7 +138,7 @@ async def process_vt_report(vt_response, total_votes, report):
     return total_votes, report
 
 
-async def ai_get_url_report(session, search_term, apikey):
+async def ai_get_url_report(session: aiohttp.ClientSession, search_term: str, apikey: str) -> dict[str, Any]:
     url, _ = search_term.split(":")
     testing = ""
     try:
@@ -148,7 +156,11 @@ async def ai_get_url_report(session, search_term, apikey):
         return {}
 
 
-async def process_ai_report(ai_response, total_votes, report):
+async def process_ai_report(
+    ai_response: dict[str, Any],
+    total_votes: TotalVotes,
+    report: Report,
+) -> tuple[TotalVotes, Report]:
     try:
         if ai_response["abuseConfidenceScore"] > MALICIOUS_CONFIDENSE_THRESHOLD * 100:
             report["AbuseIPDB"] = {"category": "malicious"}
@@ -164,7 +176,12 @@ async def process_ai_report(ai_response, total_votes, report):
     return total_votes, report
 
 
-async def cs_get_url_report(session, search_term, _apikey, secret):
+async def cs_get_url_report(
+    session: aiohttp.ClientSession,
+    search_term: str,
+    _apikey: str,
+    secret: str,
+) -> dict[str, Any]:
     url, _ = search_term.split(":")
     testing = ""
     try:
@@ -187,7 +204,9 @@ async def cs_get_url_report(session, search_term, _apikey, secret):
         return {}
 
 
-async def process_cs_report(cs_response, total_votes, report):
+async def process_cs_report(
+    cs_response: dict[str, Any], total_votes: TotalVotes, report: Report
+) -> tuple[TotalVotes, Report]:
     try:
         if "labels" in cs_response["result"]["resource"]:
             for label in cs_response["result"]["resource"]["labels"]:
@@ -213,7 +232,7 @@ async def process_cs_report(cs_response, total_votes, report):
     return total_votes, report
 
 
-async def tf_search_ioc(session, search_term, apikey):
+async def tf_search_ioc(session: aiohttp.ClientSession, search_term: str, apikey: str) -> dict[str, Any]:
     testing = ""
     try:
         headers = {
@@ -238,7 +257,9 @@ async def tf_search_ioc(session, search_term, apikey):
         return {}
 
 
-async def process_tf_report(tf_response, total_votes, report):
+async def process_tf_report(
+    tf_response: dict[str, Any], total_votes: TotalVotes, report: Report
+) -> tuple[TotalVotes, Report]:
     try:
         if tf_response["query_status"] == "no_result":
             report["ThreatFox"] = {"category": "harmless"}
@@ -251,7 +272,7 @@ async def process_tf_report(tf_response, total_votes, report):
     return total_votes, report
 
 
-def fetch_cinsscore():
+def fetch_cinsscore() -> list[str]:
     url = "https://cinsscore.com/list/ci-badguys.txt"
     try:
         response = requests.get(url, timeout=10)
@@ -264,7 +285,7 @@ def fetch_cinsscore():
         return []
 
 
-async def process_cb_report(cb_responce, total_votes, report):
+async def process_cb_report(cb_responce: int, total_votes: TotalVotes, report: Report) -> tuple[TotalVotes, Report]:
     if cb_responce:
         report["Cinsscore"] = {"category": "malicious"}
         total_votes["malicious"] = total_votes.get("malicious", 0) + 1
@@ -274,7 +295,7 @@ async def process_cb_report(cb_responce, total_votes, report):
     return total_votes, report
 
 
-def fetch_openphish():
+def fetch_openphish() -> tuple[list[str], int]:
     url = "https://raw.githubusercontent.com/openphish/public_feed/refs/heads/main/feed.txt"
     missed = 0
     try:
@@ -294,12 +315,12 @@ def fetch_openphish():
                 missed += 1
     except requests.RequestException as e:
         info_print(f"Error fetching URLs: {e}")
-        return []
+        return [], missed
     else:
         return ips, missed
 
 
-async def process_op_report(op_response, total_votes, report):
+async def process_op_report(op_response: int, total_votes: TotalVotes, report: Report) -> tuple[TotalVotes, Report]:
     if op_response:
         report["OpenPhish_pub"] = {"category": "malicious"}
         total_votes["malicious"] = total_votes.get("malicious", 0) + 1
@@ -309,7 +330,7 @@ async def process_op_report(op_response, total_votes, report):
     return total_votes, report
 
 
-async def fetch_silentpush(session, search_term, apikey):
+async def fetch_silentpush(session: aiohttp.ClientSession, search_term: str, apikey: str) -> dict[str, Any]:
     url, _ = search_term.split(":")
     testing = ""
     try:
@@ -328,7 +349,9 @@ async def fetch_silentpush(session, search_term, apikey):
         return {}
 
 
-async def process_sp_report(sp_response, total_votes, report):
+async def process_sp_report(
+    sp_response: dict[str, Any], total_votes: TotalVotes, report: Report
+) -> tuple[TotalVotes, Report]:
     try:
         if sp_response.get("risk_score", 0) > MALICIOUS_CONFIDENSE_THRESHOLD * 100:
             report["SilentPush"] = {"category": "malicious"}
