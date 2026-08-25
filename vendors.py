@@ -56,7 +56,8 @@ async def check_vt_quota(session: aiohttp.ClientSession, apikey: str) -> dict[st
         }
 
 
-async def vt_scan_ip(session: aiohttp.ClientSession, search_term: str, apikey: str) -> dict[str, Any] | None:
+async def vt_submit_ip_scan(session: aiohttp.ClientSession, search_term: str, apikey: str) -> str | None:
+    # Kicks off a VirusTotal rescan without waiting for the analysis to complete.
     ip, _ = search_term.split(":")
     testing = ""
     try:
@@ -71,24 +72,24 @@ async def vt_scan_ip(session: aiohttp.ClientSession, search_term: str, apikey: s
         ) as resp:
             testing = await resp.text()
             data = await resp.json()
-            return await vt_get_ip_analysis(session, data["data"]["id"], apikey)
+            return data["data"]["id"]
     except Exception as e:
         if testing.find("Too Many Requests") != -1:
             info_print("VirusTotal too many requests")
             await asyncio.sleep(2 * WAITING_TIME)
-            return await vt_scan_ip(session, search_term, apikey)
+            return await vt_submit_ip_scan(session, search_term, apikey)
         if testing.find("QuotaExceededError") != -1:
             info_print(f"VirusTotal quota exceeded ({search_term})")
             await asyncio.sleep(4 * WAITING_TIME)
-            return {}
+            return None
         if f"{e}".startswith("Cannot connect to host"):
             info_print("Lost connection")
             wait_for_connection()
             info_print("Connection restored")
             await asyncio.sleep(WAITING_TIME)
-            return await vt_scan_ip(session, search_term, apikey)
+            return await vt_submit_ip_scan(session, search_term, apikey)
         info_print(f"\nAn error occurred for vt_url {search_term}: \n{e} \n{testing}")
-        return {}
+        return None
 
 
 async def vt_get_ip_analysis(session: aiohttp.ClientSession, analysis_id: str, apikey: str) -> dict[str, Any] | None:
@@ -102,13 +103,13 @@ async def vt_get_ip_analysis(session: aiohttp.ClientSession, analysis_id: str, a
             if res_status == "unspecified":
                 return response  # Panic return
             if res_status == "queued":
-                info_print(f"VT queued. Waiting for {4 * WAITING_TIME} seconds before retrying...")
-                await asyncio.sleep(4 * WAITING_TIME)
+                info_print(f"{' ' * 60}| VT queued. Waiting for {10 * WAITING_TIME} seconds before retrying...")
+                await asyncio.sleep(10 * WAITING_TIME)
             elif res_status == "in-progress":
-                info_print(f"VT in-progress. Waiting for {WAITING_TIME} seconds before retrying...")
-                await asyncio.sleep(WAITING_TIME)
+                info_print(f"{' ' * 60}| VT in-progress. Waiting for {2 * WAITING_TIME} seconds before retrying...")
+                await asyncio.sleep(2 * WAITING_TIME)
             else:
-                info_print(f"VT {res_status}. Waiting for {WAITING_TIME} seconds before retrying...")
+                info_print(f"{' ' * 60}| VT {res_status}. Waiting for {WAITING_TIME} seconds before retrying...")
                 await asyncio.sleep(WAITING_TIME)
             async with session.get(
                 f"https://www.virustotal.com/api/v3/analyses/{analysis_id}",
@@ -118,7 +119,7 @@ async def vt_get_ip_analysis(session: aiohttp.ClientSession, analysis_id: str, a
                 response = data.get("data", data)
             request_num += 1
         if request_num > report_after:
-            info_print(f"VT tries {request_num} requests.")
+            info_print(f"{' ' * 60}| VT tries {request_num} requests.")
     except Exception as e:
         info_print(f"\nAn error occurred for vt_id {analysis_id}: {e}\n{response}")
     else:

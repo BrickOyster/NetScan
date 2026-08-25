@@ -2,6 +2,7 @@
 import argparse
 import asyncio
 import csv
+import io
 import os
 import pathlib
 import sys
@@ -10,6 +11,7 @@ from pprint import pp
 from typing import Any
 
 import aiohttp
+import anyio
 from dotenv import load_dotenv
 
 from vendors import (
@@ -33,7 +35,8 @@ from vendors import (
     process_tf_report,
     process_vt_report,
     tf_search_ioc,
-    vt_scan_ip,
+    vt_get_ip_analysis,
+    vt_submit_ip_scan,
 )
 
 # Loading API keys from environment variables
@@ -70,20 +73,22 @@ services = {
     "OPENPHIS": "op",
 }  # Service name : abbreviation
 fetch_from_service = {
-    "VIRUSTOTAL": vt_scan_ip,
+    # VIRUSTOTAL is handled separately by the producer/consumer split below.
     "ABUSEIPDB": ai_get_url_report,
     "THREATFOX": tf_search_ioc,
     "CINSSCORE": cb_search_list,
     "OPENPHIS": op_search_list,
 }  # Service name : function to fetch report
 process_service_report = {
-    "VIRUSTOTAL": process_vt_report,
     "ABUSEIPDB": process_ai_report,
     "THREATFOX": process_tf_report,
     "CINSSCORE": process_cb_report,
     "OPENPHIS": process_op_report,
 }  # Service name : function to process report
 # -------------------------------------------------------------
+
+# Producer -> consumer handoff: everything gathered before the VT analysis is ready.
+VTQueueItem = tuple[str, str, str | None, TotalVotes, Report, dict[str, Any]]
 
 KEYS = {service: os.getenv(service) for service in services}
 
@@ -115,38 +120,40 @@ async def quota_worker(args: argparse.Namespace) -> None:
         task.cancel("quota exceeded error")
 
 
-async def worker(
+async def producer(
     name: int,
-    queue: asyncio.Queue[str | None],
-    writer: csv.DictWriter[str],
-    lock: asyncio.Lock,
+    in_queue: asyncio.Queue[str | None],
+    out_queue: asyncio.Queue[VTQueueItem | None],
     args: argparse.Namespace,
 ) -> None:
-    """Consumes IPs from queue, processes them, and writes results to CSV."""
+    """Kicks off a VT rescan (no wait), fetches the other services, and hands off to the VT consumers."""
     async with aiohttp.ClientSession() as session:
         while True:
-            ip_port = await queue.get()
-            if ip_port is None:  # Sentinel to stop worker
-                queue.task_done()
+            ip_port = await in_queue.get()
+            if ip_port is None:  # Sentinel to stop producer
+                in_queue.task_done()
                 break
             ip, port = ip_port.split(":")
 
-            async with lock:  # make sure only one worker writes at a time
-                if args.debug:
-                    info_print(f"Worker #{name} processing '{ip_port}'")
+            if args.debug:
+                info_print(f"Producer #{name} processing '{ip_port}'")
 
-            # Process the IP
             total_votes: TotalVotes = {}
             report: Report = {}
-            responses: dict[str, Any] = {}
+            responses: dict[str, Any] = {"vt_response": {}}
 
-            for service_name, service_abbr in services.items():
+            analysis_id = None
+            if key_in_use["VIRUSTOTAL"]:
+                analysis_id = await vt_submit_ip_scan(session, ip_port, key_in_use["VIRUSTOTAL"])
+
+            for service_name, fetch in fetch_from_service.items():
+                service_abbr = services[service_name]
                 if not key_in_use[service_name]:
                     responses[f"{service_abbr}_response"] = {}
                     continue
-                responses[f"{service_abbr}_response"] = await fetch_from_service[service_name](
+                responses[f"{service_abbr}_response"] = await fetch(
                     session,
-                    f"{ip_port}",
+                    ip_port,
                     *key_in_use[service_name].split("||"),
                 )
                 total_votes, report = await process_service_report[service_name](
@@ -155,8 +162,38 @@ async def worker(
                     report,
                 )
 
+            await out_queue.put((ip, port, analysis_id, total_votes, report, responses))
+            in_queue.task_done()
+            await asyncio.sleep(WAITING_TIME)
+
+
+async def consumer(
+    name: int,
+    queue: asyncio.Queue[VTQueueItem | None],
+    out_f: Any,
+    fieldnames: list[str],
+    lock: asyncio.Lock,
+    args: argparse.Namespace,
+) -> None:
+    """Consumes producer output: polls VirusTotal for the finished analysis and writes the row."""
+    async with aiohttp.ClientSession() as session:
+        while True:
+            item = await queue.get()
+            if item is None:  # Sentinel to stop consumer
+                queue.task_done()
+                break
+            ip, port, analysis_id, total_votes, report, responses = item
+
+            if args.debug:
+                info_print(f"Consumer #{name} processing '{ip}:{port}'")
+
+            if analysis_id and key_in_use["VIRUSTOTAL"]:
+                vt_response = await vt_get_ip_analysis(session, analysis_id, key_in_use["VIRUSTOTAL"])
+                responses["vt_response"] = vt_response or {}
+                total_votes, report = await process_vt_report(responses["vt_response"], total_votes, report)
+
             # Write results row by row
-            async with lock:  # make sure only one worker writes at a time
+            async with lock:  # make sure only one consumer writes at a time
                 to_write = {
                     "IP": ip,
                     "Port": port,
@@ -164,10 +201,11 @@ async def worker(
                     "report": report,
                 }
                 to_write.update(responses)
-                writer.writerow(to_write)
+                row = io.StringIO()
+                csv.DictWriter(row, fieldnames=fieldnames).writerow(to_write)
+                await out_f.write(row.getvalue())
 
             queue.task_done()
-            await asyncio.sleep(WAITING_TIME)
 
 
 async def main(args: argparse.Namespace) -> None:
@@ -180,15 +218,16 @@ async def main(args: argparse.Namespace) -> None:
     quota_workers = None
     for idx, file in enumerate(args.files):
         info_print(f"Processing file {idx + 1}/{args.file_num}:{file}")
-        queue: asyncio.Queue[str | None] = asyncio.Queue(maxsize=args.queue_size)  # buffer size
+        ip_queue: asyncio.Queue[str | None] = asyncio.Queue(maxsize=args.queue_size)  # buffer size
+        vt_queue: asyncio.Queue[VTQueueItem | None] = asyncio.Queue(maxsize=150 * args.queue_size)
         lock = asyncio.Lock()
 
         date = datetime.now().strftime("%Y-%m-%d_%H_%M_%S")
         out_file = f"{file.removesuffix('.csv')}/report_{date}.csv"
         info_print(f"Output file: {out_file}")
-        pathlib.Path(file.removesuffix(".csv")).mkdir(exist_ok=True)
+        await anyio.Path(file.removesuffix(".csv")).mkdir(exist_ok=True)
 
-        with pathlib.Path(out_file).open("w", newline="", encoding="utf-8") as out_f:
+        async with await anyio.open_file(out_file, "w", newline="", encoding="utf-8") as out_f:
             fieldnames = [
                 "IP",
                 "Port",
@@ -196,21 +235,26 @@ async def main(args: argparse.Namespace) -> None:
                 "report",
             ]
             fieldnames.extend([f"{service_abbr}_response" for service_abbr in services.values()])
-            writer = csv.DictWriter(out_f, fieldnames=fieldnames)
-            writer.writeheader()
+            header = io.StringIO()
+            csv.DictWriter(header, fieldnames=fieldnames).writeheader()
+            await out_f.write(header.getvalue())
 
-            # Start workers
+            # Start producers and consumers
             if not quota_workers:
                 info_print("Starting quota worker...")
                 quota_workers = asyncio.create_task(quota_worker(args), name="quota-worker")
-            workers = [
-                asyncio.create_task(worker(i, queue, writer, lock, args), name=f"worker-{i}")
+            producers = [
+                asyncio.create_task(producer(i, ip_queue, vt_queue, args), name=f"producer-{i}")
                 for i in range(args.workers)
             ]
+            consumers = [
+                asyncio.create_task(consumer(i, vt_queue, out_f, fieldnames, lock, args), name=f"consumer-{i}")
+                for i in range(args.vt_workers)
+            ]
 
-            # Producer: read input CSV line by line
-            with pathlib.Path(file).open(newline="", encoding="utf-8") as in_f:
-                reader = csv.DictReader(in_f)
+            # Read input CSV line by line and feed the producers
+            async with await anyio.open_file(file, newline="", encoding="utf-8") as in_f:
+                reader = csv.DictReader((await in_f.read()).splitlines())
                 for row in reader:
                     if args.start_from:
                         args.start_from -= 1
@@ -221,14 +265,21 @@ async def main(args: argparse.Namespace) -> None:
                     if args.debug:
                         info_print(f"Enqueuing {ip}:{port}...")
                     if label.lower() != "benign":
-                        await queue.put(f"{ip}:{port}")
+                        await ip_queue.put(f"{ip}:{port}")
 
-                # Send sentinel to stop workers
-                for _ in workers:
-                    await queue.put(None)
+                # Send sentinel to stop producers
+                for _ in producers:
+                    await ip_queue.put(None)
 
-                await queue.join()
-                await asyncio.gather(*workers)
+                await ip_queue.join()
+                await asyncio.gather(*producers)
+
+                # Send sentinel to stop consumers
+                for _ in consumers:
+                    await vt_queue.put(None)
+
+                await vt_queue.join()
+                await asyncio.gather(*consumers)
 
         remaining = (time.time() - start_time) * (args.file_num - idx - 1) / (idx + 1)
         info_print(f"Report for file {idx + 1}/{args.file_num} has been generated.")
@@ -239,8 +290,9 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Fetch URL reports.")
 
     parser.add_argument("-f", "--folder", required=True, help="Folder containing CSV files to process")
-    parser.add_argument("-w", "--workers", type=int, default=2, help="Concurrent workers (default: 2)")
-    parser.add_argument("-q", "--queue_size", type=int, default=4, help="Size of the queue buffer (default: 4)")
+    parser.add_argument("-w", "--workers", type=int, default=2, help="Concurrent producers (default: 2)")
+    parser.add_argument("-vw", "--vt_workers", type=int, default=4, help="Concurrent VT result consumers (default: 4)")
+    parser.add_argument("-q", "--queue_size", type=int, default=4, help="Size of the queue buffers (default: 4)")
     parser.add_argument("-sf", "--start_from", type=int, default=0, help="Skip first N entries in first file.")
     parser.add_argument("-dbg", "--debug", action="store_true", help="Enable debug level prints")
 

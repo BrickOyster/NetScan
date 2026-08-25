@@ -56,7 +56,10 @@ ignore = [
     "missing-trailing-comma",
     "print",
     "glob",
-    "any-type"
+    "any-type",
+    "too-many-statements-in-try-clause",
+    "too-many-arguments",
+    "too-many-positional-arguments",
 ]
 
 # Allow fix for all enabled rules (when `--fix`) is provided.

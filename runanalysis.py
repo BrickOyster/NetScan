@@ -85,9 +85,11 @@ def _write_engine_series_csv(f: IO[str], report_results: dict[str, Any], date_di
 
 def _write_engine_summary_csv(f: IO[str], report_results: dict[str, Any]) -> None:
     writer = csv.writer(f)
-    writer.writerow(["Engine", "AverageLifetime", "MaxPercentage"])
+    writer.writerow(["Engine", "AverageLifetime", "MaxPercentage", "EverDetectedCount"])
     for engine_name, data in report_results.items():
-        writer.writerow([engine_name, data["average_lifetime"], max(data["percentages"])])
+        writer.writerow(
+            [engine_name, data["average_lifetime"], max(data["percentages"]), data.get("ever_detected_count", 0)],
+        )
 
 
 async def worker(_: int, queue: asyncio.Queue[str | None]) -> tuple[TotalResults, ReportResults, int]:
@@ -404,6 +406,9 @@ async def compile_report_results(
 
     engine_detected_sets = {eng: set(ids.keys()) for eng, ids in id_indicator_limetime.items()}
     all_detected = set().union(*engine_detected_sets.values()) if engine_detected_sets else set()
+    report_stats["Ever-detected IPs (any provider)"] = len(all_detected)
+    for engine_name, detected_set in engine_detected_sets.items():
+        report_results[engine_name]["ever_detected_count"] = len(detected_set)
 
     detection_counts = defaultdict(int)
     for ip in all_detected:
