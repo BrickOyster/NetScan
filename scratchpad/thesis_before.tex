@@ -1,0 +1,1623 @@
+% ============================================================
+% Thesis: Tracking the Lifetime of Malicious Indicators
+%         in Public Threat Intelligence Feeds
+% Author: Dimitris Keramidas
+% ============================================================
+\documentclass[12pt, a4paper, twoside]{report}
+
+% --- Encoding & Language ---
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[english, greek]{babel}
+\usepackage{alphabeta}          % Allow Greek letters in math mode
+
+% --- Typography ---
+\usepackage{lmodern}
+\usepackage{microtype}
+\usepackage{setspace}
+\onehalfspacing
+
+% --- Page Geometry ---
+\usepackage[
+  a4paper,
+  top=2.5cm, bottom=2.5cm,
+  inner=3cm, outer=2cm,
+  headheight=15pt
+]{geometry}
+
+% --- Headers / Footers ---
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[LE,RO]{\thepage}
+\fancyhead[LO]{\nouppercase{\rightmark}}
+\fancyhead[RE]{\nouppercase{\leftmark}}
+\renewcommand{\headrulewidth}{0.4pt}
+
+% --- Graphics & Figures ---
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{subcaption}
+\graphicspath{{../figures/}{./figures/}}
+
+% --- Tables ---
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{longtable}
+\usepackage{multirow}
+
+% --- Mathematics ---
+\usepackage{amsmath, amssymb}
+
+% --- Code Listings ---
+\usepackage{listings}
+\usepackage{xcolor}
+\lstset{
+  basicstyle=\ttfamily\small,
+  showstringspaces=false,
+  breaklines=true,
+  frame=single,
+  numbers=left,
+  numberstyle=\tiny\color{gray},
+  keywordstyle=\color{blue},
+  commentstyle=\color{green!50!black},
+  stringstyle=\color{red!70!black},
+  backgroundcolor=\color{gray!5},
+}
+
+% --- URLs & Hyperlinks ---
+\usepackage[
+  colorlinks=true,
+  linkcolor=black,
+  citecolor=blue,
+  urlcolor=blue,
+  bookmarks=true,
+  pdfauthor={Dimitris Keramidas},
+  pdftitle={Tracking the Lifetime of Malicious Indicators in Public Threat Intelligence Feeds}
+]{hyperref}
+\usepackage{url}
+
+% --- Bibliography ---
+\usepackage[numbers, sort&compress]{natbib}
+\bibliographystyle{plainnat}
+
+% --- Miscellaneous ---
+\usepackage{enumitem}
+\usepackage{csquotes}
+\usepackage{pdfpages}
+\usepackage[acronym, toc]{glossaries}
+\makeglossaries
+
+\newacronym{tls}{TLS}{Transport Layer Security}
+\newacronym{https}{HTTPS}{Hypertext Transfer Protocol Secure}
+\newacronym{c2}{C2}{command-and-control}
+\newacronym{ioc}{IOC}{indicator of compromise}
+\newacronym{jarm}{JARM}{a TLS server fingerprinting method by Salesforce Engineering}
+\newacronym{dns}{DNS}{Domain Name System}
+\newacronym{ttl}{TTL}{time to live}
+\newacronym{asn}{ASN}{autonomous system number}
+\newacronym{bgp}{BGP}{Border Gateway Protocol}
+\newacronym{ml}{ML}{machine learning}
+\newacronym{gnn}{GNN}{graph neural network}
+\newacronym{api}{API}{application programming interface}
+\newacronym{ip}{IP}{Internet Protocol}
+\newacronym{ipv4}{IPv4}{Internet Protocol version 4}
+\newacronym{ipv6}{IPv6}{Internet Protocol version 6}
+\newacronym{cli}{CLI}{command-line interface}
+\newacronym{csv}{CSV}{comma-separated values}
+\newacronym{rq}{RQ}{research question}
+
+% ============================================================
+\begin{document}
+\selectlanguage{english}
+
+% ============================================================
+%  FRONT MATTER
+% ============================================================
+\begin{titlepage}
+  \centering
+
+  {\Large\bfseries Technical University of Crete\\[0.3em]
+  School of Electrical and Computer Engineering}\\[0.5em]
+  {\large Diploma Thesis}\\[0.8cm]
+
+  \rule{\linewidth}{0.5mm}\\[0.4cm]
+  {\LARGE\bfseries Tracking the Lifetime of Malicious Indicators\\[0.3em]
+  in Public Threat Intelligence Feeds}\\[0.4cm]
+  \rule{\linewidth}{0.5mm}\\[0.5cm]
+
+  {\large\itshape
+  Παρακολούθηση της διάρκειας ζωής κακόβουλων δεικτών\\[0.2em]
+  σε ροές πληροφοριών για δημόσιες απειλές}\\[0.9cm]
+
+  \begin{tabular}{@{}l@{\hspace{3cm}}l@{}}
+    \textit{Author:} & \textit{Thesis Committee:} \\
+    Dimitris Keramidas & [Supervisor Name] (Supervisor) \\
+     & [Committee Member 2] \\
+     & [Committee Member 3] \\
+  \end{tabular}\\[0.8cm]
+
+  \includegraphics[width=2cm]{tuc_logo.png}\\[0.8cm]
+
+  {\itshape A thesis submitted in fulfillment of the requirements\\
+  for the diploma of Electrical and Computer Engineer\\[0.3em]
+  in the\\[0.3em]
+  School of Electrical and Computer Engineering}\\[0.6cm]
+
+  \vfill
+  {\large Chania, Crete, Greece \\ \the\year}
+\end{titlepage}
+
+\cleardoublepage
+
+% --- Copyright / Declaration ---
+\thispagestyle{empty}
+\vspace*{\fill}
+\begin{center}
+  \textcopyright\ \the\year\ Dimitris Keramidas. All rights reserved.
+\end{center}
+\vspace*{\fill}
+\cleardoublepage
+
+% --- Abstract (English) ---
+\chapter*{Abstract}
+\addcontentsline{toc}{chapter}{Abstract}
+
+Public threat intelligence feeds are a primary resource for identifying malicious activity on the
+internet. This study investigates the lifetime of malicious indicators across six public feeds
+--- VirusTotal, AbuseIPDB, Censys, ThreatFox, Cinsscore, and OpenPhish --- using IP addresses
+classified as malicious by TLScope as ground truth. TLScope is an active TLS fingerprinting system
+that identifies malicious servers through machine learning without inspecting payload content.
+
+Each IP is tracked on a predominantly three-day cadence across all providers for one to two
+months, measuring
+\textbf{detection lag} (how quickly providers identify what TLScope has already found),
+\textbf{indicator persistence} (how long a detection is maintained), and
+\textbf{inter-provider agreement}. Across eight collection waves covering 18\,428 TLScope-identified
+IPs, 81.2\% were never flagged by any of the six tracked providers, and among those that were,
+agreement was low, with 83.9\% of detected IPs flagged by only a single detecting engine. These
+results quantify a substantial gap between specialised active scanning and public feed coverage,
+contributing to a broader understanding of threat intelligence ecosystem effectiveness and the
+temporal lifecycle of malicious indicators.
+
+\bigskip\noindent
+\textbf{Keywords:} threat intelligence, indicator of compromise, malicious IP, VirusTotal,
+TLS fingerprinting, detection lag, indicator lifetime, botnet
+
+\cleardoublepage
+
+% --- Abstract (Greek) ---
+\selectlanguage{greek}
+\chapter*{Περίληψη}
+\addcontentsline{toc}{chapter}{Περίληψη}
+
+Οι δημόσιες ροές πληροφοριών για απειλές αποτελούν σημαντικό εργαλείο για τον εντοπισμό
+κακόβουλης δραστηριότητας στο διαδίκτυο. Στην παρούσα εργασία διερευνάται η διάρκεια ζωής
+κακόβουλων δεικτών σε έξι δημόσιες ροές (\foreignlanguage{english}{VirusTotal},
+\foreignlanguage{english}{AbuseIPDB}, \foreignlanguage{english}{Censys},
+\foreignlanguage{english}{ThreatFox}, \foreignlanguage{english}{Cinsscore}
+και \foreignlanguage{english}{OpenPhish}), χρησιμοποιώντας ως δεδομένα αναφοράς διευθύνσεις
+\foreignlanguage{english}{IP} που έχουν ταξινομηθεί ως
+κακόβουλες από το εργαλείο \foreignlanguage{english}{TLScope}. Κάθε διεύθυνση παρακολουθείται κατά κύριο λόγο ανά τρεις
+ημέρες σε κάθε
+πάροχο για διάστημα ενός έως δύο μηνών, με σκοπό τη μέτρηση της καθυστέρησης ανίχνευσης,
+της επιμονής των δεικτών και του βαθμού συμφωνίας μεταξύ των παρόχων. Σε οκτώ κύκλους συλλογής
+δεδομένων, που κάλυψαν 18.428 διευθύνσεις \foreignlanguage{english}{IP} ταξινομημένες από το
+\foreignlanguage{english}{TLScope}, το 81,2\% δεν
+επισημάνθηκε ποτέ από κανέναν από τους έξι παρόχους που παρακολουθήθηκαν, ενώ μεταξύ των
+υπολοίπων η συμφωνία ήταν χαμηλή, καθώς το 83,9\% των δεικτών που εντοπίστηκαν επισημάνθηκαν από
+μόνο μία μηχανή ανίχνευσης. Τα αποτελέσματα αυτά ποσοτικοποιούν ένα σημαντικό χάσμα μεταξύ
+εξειδικευμένης ενεργής σάρωσης \foreignlanguage{english}{TLS} και της κάλυψης από δημόσιες ροές πληροφοριών, συμβάλλοντας
+στην κατανόηση της αποτελεσματικότητας του οικοσυστήματος
+\foreignlanguage{english}{Threat Intelligence}.
+
+\bigskip\noindent
+\textbf{Λέξεις-κλειδιά:} πληροφορίες απειλών, δείκτης παραβίασης, κακόβουλη
+\foreignlanguage{english}{IP},
+\foreignlanguage{english}{VirusTotal}, αποτύπωμα \foreignlanguage{english}{TLS}, καθυστέρηση ανίχνευσης, διάρκεια ζωής δείκτη,
+\foreignlanguage{english}{botnet}
+
+\selectlanguage{english}
+\cleardoublepage
+
+% --- Acknowledgements ---
+\chapter*{Acknowledgements}
+\addcontentsline{toc}{chapter}{Acknowledgements}
+
+I would like to thank my supervisor for their guidance throughout this project,
+and the authors of TLScope for providing the classified IP datasets that form the
+empirical foundation of this work.
+
+\cleardoublepage
+
+% --- Table of Contents ---
+\tableofcontents
+\cleardoublepage
+
+\listoffigures
+\addcontentsline{toc}{chapter}{List of Figures}
+\cleardoublepage
+
+\listoftables
+\addcontentsline{toc}{chapter}{List of Tables}
+\cleardoublepage
+
+\glsaddall
+\printglossary[type=\acronymtype, title={List of Abbreviations}, nonumberlist]
+\cleardoublepage
+
+% ============================================================
+%  MAIN MATTER
+% ============================================================
+
+% ============================================================
+\chapter{Introduction}
+\label{ch:introduction}
+% ============================================================
+
+\section{Motivation}
+
+The modern internet threat landscape relies heavily on \emph{public threat intelligence feeds} ---
+continuously updated lists of known-malicious IP addresses, domains, and URLs. Security operations
+centres, firewalls, intrusion detection systems, and endpoint products consume these feeds to block
+or flag traffic associated with malware, botnet command-and-control (C2) infrastructure, phishing
+campaigns, and abuse activity. The practical value of a feed depends critically on two properties:
+(a) its \textbf{coverage} --- the fraction of genuinely malicious indicators it detects --- and
+(b) its \textbf{timeliness} --- how quickly it detects and how long it retains an indicator once
+detected.
+
+Despite the central role these feeds play in operational security, their temporal behaviour has
+received limited systematic study. It is not well understood how long after a malicious server is
+deployed it takes for public feeds to flag its IP address, how long the flag persists once added,
+or to what extent different providers agree with each other.
+
+\section{Problem Statement}
+
+This thesis addresses the following research questions:
+
+\begin{enumerate}[label=\textbf{RQ\arabic*.}]
+  \item \textbf{Detection lag:} How many days pass between a server being identified as malicious
+    by TLScope and its IP address being flagged by each public threat intelligence provider?
+  \item \textbf{Indicator persistence:} Once a provider flags an IP, how long does it maintain
+    that classification before the indicator expires?
+  \item \textbf{Inter-provider agreement:} Do different providers detect the same IPs, or does
+    each cover a largely distinct subset of the malicious population?
+\end{enumerate}
+
+\section{Approach}
+
+The study uses IP addresses classified as malicious by \textbf{TLScope}
+\cite{theofanous2024tlscope}, an active TLS fingerprinting system, as ground truth.
+Each group of 1\,596--2\,728 malicious IPs (18\,428 IPs across eight completed groups) is tracked
+on a predominantly three-day cadence (\S\ref{sec:collection_schedule}) across six providers for one
+to two months. Six providers are evaluated:
+
+\begin{itemize}
+  \item \textbf{VirusTotal} --- multi-engine antivirus aggregate
+  \item \textbf{AbuseIPDB} --- community abuse score
+  \item \textbf{Censys} --- internet-wide scanner with C2 labels
+  \item \textbf{ThreatFox} --- malware IOC feed (abuse.ch)
+  \item \textbf{Cinsscore} --- CINS Army List (daily blacklist)
+  \item \textbf{OpenPhish} --- phishing URL feed with DNS resolution
+\end{itemize}
+
+This is the design each wave was set up to follow; in practice, Censys tracking was discontinued
+partway through the study (\S\ref{sec:provider_availability}), which the results in
+Chapter~\ref{ch:results} account for explicitly.
+
+\section{Contributions}
+
+The main contributions of this thesis are:
+\begin{enumerate}
+  \item A longitudinal dataset of 18\,428 TLScope-identified malicious IPs tracked across six
+    public threat intelligence providers over eight waves spanning eleven months, with a
+    one-to-two-month observation window per wave.
+  \item Empirical measurements of detection lag, indicator lifetime, and inter-provider agreement,
+    reported both per provider and per individual detection engine.
+  \item A quantified coverage gap between active TLS scanning and public feed coverage: 81.2\% of
+    TLScope-identified IPs are never flagged by any tracked provider, and that rate rises
+    significantly over the study period rather than holding steady.
+  \item Evidence that low inter-provider agreement reflects genuine specialisation rather than
+    sparse detection, obtained by comparing observed single-engine detection against a Poisson
+    binomial chance baseline derived from each engine's own detection rate
+    (\S\ref{sec:agreement_vs_chance}).
+  \item A provider-level accounting showing that coverage is concentrated almost entirely in
+    VirusTotal's aggregated engines, with one tracked provider (Cinsscore) detecting none of the
+    18\,428 IPs at any point (\S\ref{sec:provider_coverage}).
+  \item Open-source tooling (\texttt{NetScan}) for reproducible longitudinal IP tracking across
+    multiple providers.
+\end{enumerate}
+
+\section{Thesis Structure}
+
+The remainder of this thesis is organised as follows. Chapter~\ref{ch:background} provides
+background on TLS fingerprinting and threat intelligence ecosystems.
+Chapter~\ref{ch:related_work} surveys related work.
+Chapter~\ref{ch:methodology} describes the data collection and analysis methodology.
+Chapter~\ref{ch:providers} details each threat intelligence provider.
+Chapter~\ref{ch:implementation} describes the implementation of the NetScan system.
+Chapter~\ref{ch:results} presents experimental results.
+Chapter~\ref{ch:discussion} interprets the findings and sets out the threats to validity that bound
+them. Chapter~\ref{ch:future_work} outlines future directions.
+Chapter~\ref{ch:conclusion} concludes the thesis.
+
+% ============================================================
+\chapter{Background}
+\label{ch:background}
+% ============================================================
+
+\section{TLS and Encrypted Malicious Infrastructure}
+
+The Transport Layer Security (TLS) protocol is the cryptographic foundation of HTTPS and many
+other application protocols. By 2022, more than 85\% of malware used encrypted communication
+channels, making payload-based detection infeasible for classifying traffic without decrypting
+it~\cite{theofanous2024tlscope}. TLS metadata --- cipher suite selection, TLS version, certificate
+properties --- remains visible even when payload content is encrypted, providing an alternative
+detection surface.
+
+\subsection{JARM Fingerprinting}
+
+JARM~\cite{jarm2020} is a widely-used active TLS fingerprinting technique. It sends 10 specially
+crafted \texttt{ClientHello} packets to a target server, varying parameters such as cipher suite
+ordering and extension fields. Each server's TLS stack responds according to its implementation;
+the pattern of selected ciphers and extensions across the 10 probes is hashed into a 62-character
+fingerprint. Servers running the same TLS library and configuration produce the same JARM hash,
+enabling large-scale infrastructure clustering.
+
+\subsection{TLScope}
+
+TLScope~\cite{theofanous2024tlscope} extends JARM-style fingerprinting with a full machine
+learning pipeline. Rather than collapsing responses to a hash, TLScope treats the full per-probe
+response vector as a high-dimensional feature input, preserving inter-probe correlations.
+Additional features include certificate metadata, protocol capability flags, and server
+behaviour under adversarial \texttt{ClientHello} configurations. The resulting classifier
+achieves 91\% precision and 95\% recall for malicious server detection, and 99\% precision and
+recall for botnet family identification.
+
+\section{Threat Intelligence Feeds}
+
+Threat intelligence feeds are curated lists of indicators of compromise (IOCs). IP-based feeds
+typically assign a reputation score or binary malicious/benign label to individual IP addresses.
+Feed types include:
+
+\begin{description}
+  \item[Community-reported feeds] Aggregated reports from network operators, security researchers,
+    and automated systems (e.g., AbuseIPDB).
+  \item[Multi-engine aggregates] Aggregation of multiple antivirus and security engines
+    (e.g., VirusTotal).
+  \item[Specialised IOC databases] Curated databases of malware-related indicators
+    (e.g., ThreatFox).
+  \item[Active scanning feeds] Feeds built from continuous internet-wide scanning
+    (e.g., Censys).
+  \item[Blacklists] Lightweight daily-updated IP block lists
+    (e.g., Cinsscore).
+  \item[Phishing URL feeds] Domain-based phishing indicators resolved to IPs
+    (e.g., OpenPhish).
+\end{description}
+
+\section{Indicator Lifecycle}
+
+The lifecycle of a threat indicator in public feeds can be characterised by three phases:
+\begin{enumerate}
+  \item \textbf{Pre-detection:} The threat exists but has not yet been flagged.
+  \item \textbf{Active detection:} The indicator is present and the IP is flagged.
+  \item \textbf{Expiry:} The indicator is removed, either because the threat has ended or
+    the provider's retention policy has expired the entry.
+\end{enumerate}
+
+This thesis measures detection lag (transition from phase 1 to phase 2) and indicator lifetime
+(duration of phase 2).
+
+% ============================================================
+\chapter{Related Work}
+\label{ch:related_work}
+% ============================================================
+
+\section{TLScope: the Parent Project}
+
+TLScope \cite{theofanous2024tlscope} is not a related work surveyed alongside the papers below ---
+it is the \textbf{parent project} this thesis is built directly on top of, and its output is this
+thesis's ground truth rather than a point of comparison. TLScope actively initiates TLS connections
+to servers and sends exhaustively crafted \texttt{ClientHello} messages that progressively force
+each server to select alternative cipher suites, extending JARM-style fingerprinting
+(\S\ref{ch:background}) with a full ML pipeline. The system achieves 91\% precision and 95\% recall
+for malicious server detection and 99\%/99\% for botnet family identification, and its output ---
+groups of 1\,596--2\,728 IP addresses per batch classified as malicious --- is what
+\S\ref{ch:methodology} tracks across the six public feeds.
+
+The two projects answer different halves of the same underlying question, as
+Table~\ref{tab:tlscope_netscan} makes explicit:
+
+\begin{table}[h]
+  \centering
+  \caption{Division of questions between TLScope and this thesis.}
+  \label{tab:tlscope_netscan}
+  \begin{tabularx}{\linewidth}{Xl}
+    \toprule
+    \textbf{Question} & \textbf{Answered by} \\
+    \midrule
+    Is this server's TLS behaviour indicative of malicious hosting? & TLScope \\
+    What botnet family does this server belong to?                 & TLScope \\
+    How quickly do public feeds detect what TLScope already found?  & This thesis \\
+    How long do providers keep an indicator flagged once detected?  & This thesis \\
+    Do providers agree on the same IPs, or cover distinct subsets?  & This thesis \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+Every paper surveyed in the remainder of this chapter is instead assessed by its relation
+\emph{to} TLScope, not treated as a peer of it (a curated version of this survey, cross-referenced
+against this thesis's own Future Work chapter, is maintained alongside the source PDFs in
+\texttt{wiki/papers/notes.md}).
+
+\section{Malicious Domain and IP Reputation Systems}
+
+\subsection{NOTOS}
+
+Antonakakis et al.\ \cite{antonakakis2010notos} introduced NOTOS, a dynamic reputation system for
+DNS that scores domains before they appear on static blacklists. NOTOS operates on passive DNS data
+from ISP recursive resolvers, computing per-domain scores from network properties (IP diversity,
+TTL volatility) and zone properties (registration age, registrar identity). It achieves a 96.8\%
+true-positive rate at a 0.38\% false-positive rate and detects malicious domains weeks to months
+before blacklists.
+
+NOTOS is a foundational reference for understanding the \emph{reputation-system design space} that
+public feeds implement operationally. The thesis's measured detection lag is the empirical
+counterpart to NOTOS's ``lead time before blacklists''.
+
+\subsection{EXPOSURE}
+
+Bilge et al.\ \cite{bilge2011exposure} extended passive DNS analysis to a richer 15-feature set
+covering time-based, DNS-answer-based, TTL-based, and domain-name-based features, achieving
+$\sim$98\% accuracy with a C4.5 decision tree on 100 billion DNS requests. Their finding of a
+1.2-day average malicious domain lifespan is directly relevant to the thesis: if TLScope-identified
+IPs host similarly short-lived campaigns, public feeds may structurally miss them before evidence
+accumulates. This is consistent with the thesis's own finding that 81.2\% of TLScope-identified IPs
+were never flagged by any provider across the full observation window
+(Chapter~\ref{ch:results}): a substantial share may simply never generate enough evidence within
+a provider's detection window, regardless of how long that window is.
+
+\subsection{MANTIS}
+
+Deniz et al.\ \cite{deniz2025mantis} presented MANTIS, a content-agnostic system for zero-day
+malicious domain detection using infrastructure reuse patterns. MANTIS builds a heterogeneous graph
+over domains, IPs, ASNs, nameservers, and registrars, and applies a graph neural network to
+identify domains on low-reputation hosting infrastructure. It achieves 99.7\% precision, 86.9\%
+recall, and detects approximately 19\,000 new malicious domains per day --- 5$\times$ more than
+VirusTotal alone.
+
+MANTIS and this thesis address complementary lifecycle phases: MANTIS handles \emph{entry} into
+threat feeds, while this thesis handles \emph{persistence and exit}. MANTIS's finding that it
+detects 5$\times$ more malicious domains than VirusTotal anticipates the thesis's own measured
+coverage gap: 81.2\% of TLScope-identified IPs were never flagged by any of the six tracked
+providers over a one-to-two-month window (Chapter~\ref{ch:results}), a gap at least as large as
+MANTIS's, though the two are measured on different units (domains vs.\ IPs) and time bases (daily
+rate vs.\ full-window absence).
+
+\section{Temporal and Longitudinal Studies of Threat Indicators}
+\label{sec:rw_temporal}
+
+Research on the temporal dimension of threat intelligence remains sparse relative to work on
+detection accuracy, and where temporal results do appear they are typically a by-product of
+evaluating a detector rather than the object of study. Three of the systems surveyed above report
+such a by-product, and together they bound the question this thesis asks directly.
+
+EXPOSURE \cite{bilge2011exposure} measured an average malicious-domain lifespan of 1.2 days in live
+ISP deployment --- the only absolute indicator-lifetime figure in the surveyed literature, and an
+order of magnitude shorter than the 8.1--32.0-day provider-side lifetimes measured here
+(\S\ref{ch:results}). The two are not in conflict: EXPOSURE measures how long the malicious
+\emph{infrastructure} stays active, while this thesis measures how long a \emph{provider keeps its
+flag raised}, and the gap between them is precisely the interval in which a feed is reporting on
+infrastructure that may already be gone. NOTOS \cite{antonakakis2010notos} and MANTIS
+\cite{deniz2025mantis} both report lead time rather than lifetime --- weeks to months and days to
+weeks ahead of public blacklists respectively --- but each measures that lead against blacklists as
+an undifferentiated aggregate, without asking which provider supplies it or how long it persists
+afterwards.
+
+What none of these provide is a longitudinal, per-provider measurement of the full indicator
+lifecycle --- entry, persistence, and expiry --- against a fixed ground-truth population tracked
+over time. That is the gap this thesis addresses: rather than reporting lead time as a single
+summary statistic of one detector's advantage, it tracks a fixed set of 18\,428 TLScope-identified
+IPs across six providers for one to two months each and reports where each provider sits in that
+lifecycle (Chapters~\ref{ch:results} and~\ref{ch:discussion}).
+
+\section{Machine Learning for Network Security}
+
+\subsection{Robustness Under Concept Drift}
+
+Li et al.\ \cite{li2025conceptdrift} addressed concept drift in Windows malware detection,
+using graph neural networks on control flow graphs and adversarial domain adaptation to learn
+drift-invariant features. The thesis directly observes concept drift in action through temporal
+tracking: as providers update their models and threat feeds, the classification of the same IP can
+change over time, independently of the underlying threat state.
+
+\subsection{Low-Quality Training Data}
+
+Qing et al.\ \cite{qing2024rapier} presented RAPIER, a framework for robust encrypted malicious
+traffic detection under low-quality training data with up to 45\% label noise. RAPIER exploits the
+distributional observation that malicious traffic is scattered across feature space while benign
+traffic is concentrated. This is directly applicable to the thesis: if a TLScope-identified IP is
+flagged by most providers, it likely sits in a dense malicious region (high confidence); if only
+one provider flags it, it likely sits in a sparse region (potential noise). The thesis's own
+inter-provider agreement results confirm that the sparse case dominates in practice: 83.9\% of
+ever-detected IPs are flagged by exactly one engine (Chapter~\ref{ch:results}), meaning most
+provider-confirmed detections in this dataset would fall on the low-confidence, noise-prone side
+of RAPIER's density distinction, and only a small minority (16.1\%) carry the multi-source
+corroboration RAPIER associates with dense, high-confidence regions.
+
+\subsection{Density-Based Robustness}
+
+Tian et al.\ \cite{tian2025density} identified feature sparsity as a root cause of multiple
+failure modes in AI-driven malware detection, including vulnerability to poisoning attacks, evasion
+attacks, and concept drift. Provider coverage gaps in the thesis correspond to the sparsity
+problem: TLScope-identified IPs never flagged by any public feed likely fall in sparse regions
+of the threat indicator space where provider training data is thin. The scale of this coverage gap
+--- 81.2\% of TLScope-identified IPs never flagged by any tracked provider (Chapter
+\ref{ch:results}) --- suggests that, in this dataset, the sparse region is not a minority edge
+case but the dominant regime.
+
+\section{Internet-Wide Scanning}
+
+\subsection{IPv6 Scanning with 6Sense}
+
+Williams et al.\ \cite{williams2024sixsense} presented 6Sense, which uses reinforcement learning
+to make IPv6 internet scanning tractable. 6Sense is a sibling project to TLScope: both perform
+internet-wide active scanning, but 6Sense targets IPv6 while TLScope focuses on IPv4. The thesis
+currently tracks only IPv4; 6Sense establishes the groundwork for a future IPv6 extension where
+public feed coverage may lag even further.
+
+\subsection{BGP Routing Anomaly Detection (BEAM)}
+
+Chen et al.\ \cite{chen2024beam} presented BEAM, a semantics-aware BGP routing anomaly detection
+system using AS-level role embeddings. BEAM's ``routing role consistency'' concept maps to the
+thesis: each IP maintains a ``threat role'' across providers over time. Normal evolution means the
+IP remains consistently flagged by the same providers; anomalies are unexpected changes in which
+providers flag an IP.
+
+\section{DNS Infrastructure and Security}
+
+\subsection{Stale DNS Glue Records}
+
+Zhang et al.\ \cite{zhang2024staleglue} demonstrated that 23.18\% of DNS glue records are
+outdated, with over 6 million domains at risk from stale-glue domain hijacking. This directly
+affects the thesis's OpenPhish data quality: the thesis converts OpenPhish URLs (domain-based) to
+IP addresses via DNS resolution, and stale glue can cause incorrect IP attribution, distorting
+detection lag measurements.
+
+\subsection{DNS Resolver Vulnerabilities (ResolverFuzz)}
+
+Zhang et al.\ \cite{zhang2024resolverfuzz} discovered 23 vulnerabilities in mainstream DNS
+resolver implementations via query-response fuzzing. DNS resolver vulnerabilities in provider
+infrastructure can cause providers to resolve domain-based threats to wrong IPs, appearing as
+false positives or missed detections in provider comparison independently of the actual threat.
+
+\section{Proxy-Based Abuse Detection}
+
+Ramesh et al.\ \cite{ramesh2024calcuLatency} presented CalcuLatency, which detects proxy-enabled
+abuse using cross-layer latency measurements. Different malicious infrastructure types exhibit
+characteristic latency patterns. In the context of this thesis, latency-based infrastructure
+clustering can explain correlated detection timing: if multiple TLScope-identified IPs share
+identical latency fingerprints, they likely originate from the same hosting provider and should
+exhibit similar detection lag across providers.
+
+% ============================================================
+\chapter{Methodology}
+\label{ch:methodology}
+% ============================================================
+
+\section{Overview}
+
+NetScan tracks malicious IP addresses across six public threat intelligence providers over a
+one-to-two-month window. The ground truth comes from TLScope~\cite{theofanous2024tlscope}, a
+machine-learning system that identifies malicious servers via active TLS fingerprinting.
+
+The study produces two primary measurements per provider:
+\begin{itemize}
+  \item \textbf{Detection lag} --- how many days pass before a provider first flags a
+    TLScope-identified IP.
+  \item \textbf{Indicator lifetime} --- how long a provider keeps the IP classified as malicious
+    once it detects it.
+\end{itemize}
+
+\section{Data Collection}
+
+\subsection{Input Groups}
+
+Each group consists of roughly 1\,600--2\,700 IP addresses classified as malicious by TLScope
+(eight completed groups, 18\,428 IPs in total). Groups are stored in \texttt{group\_wave\_N/}
+directories and each contains a CSV with columns \texttt{IP}, \texttt{Port}, and \texttt{label}.
+Only rows where \texttt{label} $\neq$ \texttt{benign} are processed.
+
+\textbf{Alignment of tracking start with TLScope classification.} Each wave is split into two or
+three sub-groups, each seeded by one dated TLScope output batch, and tracking of a sub-group begins
+on the date that batch was produced --- the batch directory name carries that date (e.g.\
+\texttt{tlscope\_keramidas\_2026-08-05} is tracked from 2026-08-05). This alignment holds exactly
+for every sub-group in waves 2 and 4--8, and within one day for waves 1 and 3, where tracking
+started the day after the batch date. It is what makes RQ1 answerable at all: because tracking
+starts when TLScope produces its verdict, ``cycles elapsed since the group's start date''
+(\S\ref{sec:notation}) is a direct proxy for ``time elapsed since TLScope identified the server'',
+which is the quantity RQ1 actually asks about. Were the two decoupled, the reported lag would
+measure only when this study happened to begin looking, not how long the ecosystem took to react.
+
+\subsection{Collection Schedule}
+\label{sec:collection_schedule}
+
+Data collection nominally runs every 3 days: for each run, \texttt{runfetch.py} queries every
+configured provider for every IP in the group and writes a timestamped CSV to the wave folder.
+This cadence is not perfectly uniform across the study, however. A per-group \texttt{config.json}
+override (Appendix~\ref{app:cli}) allows an individual wave to run on a different cycle length, and
+two of the eight waves do: wave 1 was collected on a 1-day cadence and wave 5 on a 2-day cadence,
+while the remaining six waves (2--4, 6--8) use the nominal 3-day cadence. All lifetime figures
+(\S\ref{sec:notation}) are computed in real days and are unaffected by this, since the cycle length
+$\Delta$ is substituted per group; detection-lag figures expressed as a raw cycle count, however,
+carry a different time resolution for these two waves than for the rest (\S\ref{sec:threats_to_validity}).
+
+\subsection{Provider Availability}
+\label{sec:provider_availability}
+
+The six providers listed in \S\ref{ch:introduction} were tracked for the full study with one
+exception: Censys querying (\texttt{cs\_get\_url\_report}/\texttt{process\_cs\_report} in
+\texttt{vendors.py}) was disabled in the data collection tool on 2026-04-19, after wave 4 finished
+and shortly before wave 5 began, and was never re-enabled. Consequently Censys results in this
+thesis cover only waves 1--4 (9\,855 of the 18\,428 tracked IPs); waves 5--8 (8\,573 IPs) were
+monitored by the remaining five providers only. This was a deliberate change to the collection
+tool's active provider list rather than an API outage, but no rationale for it is recorded in the
+codebase, and its effect on the results is addressed in \S\ref{sec:threats_to_validity}.
+
+\subsection{Provider Query Strategies}
+
+Table~\ref{tab:provider_queries} summarises the query type and classification basis for each
+provider.
+
+\begin{table}[h]
+  \centering
+  \caption{Provider query strategies and classification basis.}
+  \label{tab:provider_queries}
+  \begin{tabularx}{\linewidth}{lXX}
+    \toprule
+    \textbf{Provider} & \textbf{Query type} & \textbf{Classification basis} \\
+    \midrule
+    VirusTotal  & POST rescan, then GET analysis & Malicious + suspicious vote counts \\
+    AbuseIPDB   & GET check (30-day window)       & \texttt{abuseConfidenceScore} threshold \\
+    Censys      & GET host record                 & Presence of \texttt{c2} label \\
+    ThreatFox   & POST IOC search (exact match)   & \texttt{query\_status} $\neq$ \texttt{no\_result} \\
+    Cinsscore   & Local lookup in downloaded list & IP presence in CINS Army List \\
+    OpenPhish   & DNS resolve + list lookup       & IP presence in resolved feed \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\subsection{Rate Limiting}
+\label{sec:rate_limiting}
+
+VirusTotal enforces hourly and daily API quotas. A background \texttt{quota\_worker} task monitors
+remaining quota every $\sim$17 minutes and cancels all fetch tasks when the daily limit is reached.
+Between individual IP queries a configurable wait time of 32 seconds (\texttt{WAITING\_TIME}) is
+applied to stay within rate limits. Cinsscore and OpenPhish are list-based: the full list is
+downloaded once at startup and all IPs are checked locally.
+
+\section{Analysis}
+
+\subsection{Notation}
+\label{sec:notation}
+
+For a tracked (IP, provider) pair $(i,p)$, let $d_1 < d_2 < \dots < d_n$ be the collection dates for
+$i$'s group ($\Delta = d_{t+1}-d_t = 3$ days for six of the eight waves; 1 day for wave 1 and 2 days
+for wave 5, \S\ref{sec:collection_schedule}) and let
+$x_t(i,p) \in \{0,1\}$ indicate whether provider $p$ classified $i$ as \emph{malicious} or
+\emph{suspicious} on cycle $t$.
+
+\textbf{Detection lag.} Let $\tau(i,p) = \min\{t : x_t(i,p) = 1\}$ be the first cycle on which $p$
+detects $i$. Detection lag is measured in cycles relative to the group's start,
+$\mathrm{Lag}(i,p) = \tau(i,p) - 1$; if $i$ is never detected by $p$, lag is undefined (right-censored
+by the observation window rather than equal to some finite value).
+
+\textbf{Indicator lifetime.} An indicator is considered \textbf{expired} after 2 consecutive
+non-detections (\texttt{EXPIRED\_AFTER} = 2). Once first detected at $\tau(i,p)$, every subsequent
+cycle --- whether a detection or a single intervening miss --- extends the indicator's lifetime by
+$\Delta$; the indicator expires, and stops accumulating lifetime, on the second consecutive miss.
+Concretely, if $t^*(i,p)$ is the first cycle at which two consecutive misses have occurred since
+$\tau(i,p)$, the lifetime is
+\[
+  L(i,p) = \bigl(t^*(i,p) - \tau(i,p) - 1\bigr) \cdot \Delta ,
+\]
+i.e.\ the cumulative time from first detection up to, but excluding, the confirming second miss ---
+a single isolated miss does not itself end the indicator, but two in a row do.
+
+\textbf{Inter-provider agreement.} For an engine $e$ (a VirusTotal sub-engine or another provider),
+let $D_e = \{(i,p) : \exists\, t,\ x_t(i,e)=1\}$ be the set of IPs it ever flags. Pairwise agreement
+between engines $a$ and $b$ is the Jaccard index
+\[
+  J(a,b) = \frac{|D_a \cap D_b|}{|D_a \cup D_b|} .
+\]
+
+\subsection{Aggregate Statistics}
+
+For each wave group, the following aggregate series are computed over time:
+\begin{description}
+  \item[\texttt{aggregate}] Total malicious votes across all IPs per time step.
+  \item[\texttt{percentage}] Fraction of IPs with at least one malicious vote per time step.
+  \item[\texttt{diff}] Net change in aggregate votes between consecutive time steps.
+\end{description}
+
+\subsection{Per-Provider Statistics}
+
+For the three providers with the highest peak detection percentage, the following are generated:
+\begin{itemize}
+  \item Malicious percentage over time.
+  \item Malicious report counts over time.
+  \item Average indicator lifetime (days).
+\end{itemize}
+
+\section{Ethical Considerations}
+
+Every provider in Chapter~\ref{ch:providers} is queried through its own documented public API or
+download endpoint, within the rate limits each provider enforces (\S\ref{sec:rate_limiting}); no
+provider's access controls are bypassed, and no authentication beyond a standard per-provider API
+key (Appendix~\ref{app:config}) is used. NetScan does not itself connect to, probe, or exchange
+traffic with the tracked malicious IPs: five of the six providers (AbuseIPDB, Censys, ThreatFox,
+Cinsscore, OpenPhish) return already-collected reputation data about the target IP without NetScan
+contacting that IP at all. The one exception is VirusTotal, whose rescan endpoint causes
+VirusTotal's own infrastructure --- not NetScan --- to actively probe the target
+(\S\ref{ch:implementation}); NetScan's role there is limited to requesting that scan and reading
+back the result. No traffic to or from the tracked infrastructure is captured or decrypted by this
+study. The tracked indicators are server-side infrastructure addresses drawn from an already
+published upstream classification (TLScope), not end-user or personally identifiable data, and are
+retained locally for research purposes only.
+
+% ============================================================
+\chapter{Threat Intelligence Providers}
+\label{ch:providers}
+% ============================================================
+
+\section{VirusTotal}
+
+VirusTotal aggregates results from over 70 antivirus engines and website scanners. For each IP,
+NetScan first triggers a rescan via \texttt{POST /api/v3/ip\_addresses/\{IP\}/analyse} and then
+polls the resulting analysis until \texttt{status == completed}. The \texttt{malicious +
+suspicious} vote count is used as the positive signal.
+
+VirusTotal enforces hourly and daily quotas. A background worker monitors remaining quota and
+backs off on \texttt{Too Many Requests} (64 s) and \texttt{QuotaExceededError} (128 s).
+
+\section{AbuseIPDB}
+
+AbuseIPDB is a community-driven database of reported IPs. A single GET request with a 30-day
+window returns the \texttt{abuseConfidenceScore} (0--100). NetScan applies thresholds:
+$>$25 $\to$ malicious; $>$15 $\to$ suspicious; $\leq$15 $\to$ harmless.
+
+\section{Censys}
+
+Censys continuously scans the public IPv4 address space and maintains per-host labels including
+\texttt{c2} for known C2 infrastructure. NetScan checks for \texttt{c2} labels at both the host
+level and the individual service level. Any \texttt{c2} label found at either level is classified
+as malicious. Censys querying was disabled in the collection tool after wave 4
+(\S\ref{sec:provider_availability}); the results reported for Censys in Chapter~\ref{ch:results}
+therefore cover only waves 1--4.
+
+\section{ThreatFox}
+
+ThreatFox (abuse.ch) is a free community platform for sharing malware IOCs. A POST request with
+\texttt{exact\_match: true} is issued; any \texttt{query\_status} other than \texttt{no\_result}
+is classified as malicious.
+
+\section{Cinsscore}
+
+The CINS Army List is a public text file updated continuously. NetScan downloads the full list
+once at startup and checks all IPs locally. This is the simplest provider integration: a binary
+in-list/not-in-list classification with no per-IP API overhead.
+
+\section{OpenPhish}
+
+OpenPhish provides a domain-based phishing URL feed. Because the feed contains URLs rather than
+IP addresses, NetScan extracts hostnames and resolves them to IPs via DNS at startup. An IP found
+in the resolved set is classified as malicious.
+
+The DNS resolution step introduces noise: domains that rotate IPs (fast-flux, CDN-backed phishing)
+may produce stale associations. Stale DNS glue records \cite{zhang2024staleglue} are an additional
+source of incorrect IP attribution.
+
+% ============================================================
+\chapter{Implementation}
+\label{ch:implementation}
+% ============================================================
+
+\section{Repository Structure}
+
+\begin{table}[h]
+  \centering
+  \caption{NetScan repository files and their purpose.}
+  \label{tab:repo}
+  \begin{tabularx}{\linewidth}{lX}
+    \toprule
+    \textbf{File} & \textbf{Purpose} \\
+    \midrule
+    \texttt{runfetch.py}       & Async data collection from all providers \\
+    \texttt{runanalysis.py}    & Analysis pipeline and graph generation \\
+    \texttt{vendors.py}        & Provider API client functions and report processors \\
+    \texttt{available\_fields.py} & Utility to inspect CSV output field schema \\
+    \texttt{.env\_ex}          & Example environment / API key configuration \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\section{Fetch Pipeline}
+
+VirusTotal's per-IP analysis is asynchronous on VirusTotal's own side: a submitted rescan must be
+polled until its status transitions to \texttt{completed}, and each poll iteration itself waits a
+multiple of \texttt{WAITING\_TIME} (\S\ref{ch:providers}, VirusTotal). An earlier, single-pool
+design queried every provider for a given IP from the same worker, so that worker sat blocked on
+VirusTotal's polling loop before it could move on to the next IP, even though the other providers'
+queries for that same IP had already completed in a fraction of the time. The pipeline is
+consequently split into two cooperating pools connected by a second, internal queue:
+
+\begin{enumerate}
+  \item At startup, Cinsscore and OpenPhish lists are downloaded once and held in memory.
+  \item For each input CSV in the folder, a new output file is created.
+  \item A pool of \texttt{-w} \textbf{producer} workers pulls IPs from the input queue. For each IP,
+    a producer submits the VirusTotal rescan \emph{without waiting for it to complete}, then queries
+    every other configured provider (AbuseIPDB, ThreatFox, Cinsscore, OpenPhish) synchronously. The
+    partial result --- including the VirusTotal analysis id --- is handed off to a second,
+    VirusTotal-result queue.
+  \item A pool of \texttt{-vw} \textbf{consumer} workers pulls partial results from that second
+    queue, polls the corresponding VirusTotal analysis until it reports \texttt{completed}, merges
+    the result into the row, and writes the completed row to the output CSV.
+  \item A separate \texttt{quota\_worker} background task monitors VirusTotal's daily quota and
+    cancels every producer and consumer task if it is exhausted.
+  \item Producers sleep 32 seconds between IPs to respect per-provider rate limits; the VirusTotal
+    polling loop inside each consumer applies its own independent backoff.
+\end{enumerate}
+
+This decouples the dominant source of per-IP latency --- VirusTotal polling --- from retrieval of
+every other provider's data: while a consumer waits on VirusTotal for one IP, producers continue
+submitting rescans and fetching AbuseIPDB/ThreatFox/Cinsscore/OpenPhish data for subsequent IPs,
+rather than the whole pipeline stalling on a single in-flight VirusTotal analysis. File I/O (CSV
+input/output, per-wave output folder creation) is performed asynchronously via the \texttt{anyio}
+library so that large file reads and writes do not block the same event loop that drives the
+provider queries.
+
+\section{Fetch Output Format}
+
+Each report CSV contains per-IP columns including \texttt{total\_votes} (aggregate vote counts),
+\texttt{report} (per-provider binary classifications), and raw provider response fields
+(\texttt{vt\_response}, \texttt{ai\_response}, \texttt{tf\_response}, etc.).
+
+\section{Analysis Output}
+
+Running \texttt{runanalysis.py} on a wave folder writes the following files to an output
+subdirectory (\texttt{group\_analysis\_out\_dir/} by default) inside that folder:
+
+\begin{table}[h]
+  \centering
+  \caption{Files produced by the analysis pipeline.}
+  \label{tab:analysis_output}
+  \begin{tabularx}{\linewidth}{lX}
+    \toprule
+    \textbf{File} & \textbf{Content} \\
+    \midrule
+    \texttt{out\_logs.txt}       & Run arguments and all computed statistics (Total Stats, Report Stats) \\
+    \texttt{all\_zero.csv}       & IPs with zero malicious votes from any provider \\
+    \texttt{non\_zero.csv}       & IPs detected by at least one provider at least once \\
+    \texttt{ip\_port\_series.csv}  & Per-host vote history (\texttt{IP}, \texttt{Port}, \texttt{Group}, \texttt{Date}, votes) \\
+    \texttt{total\_series.csv}   & Aggregate/diff/percentage series, one row per collection cycle \\
+    \texttt{engine\_series.csv}  & Per-engine count/percentage series, one row per engine per cycle \\
+    \texttt{engine\_summary.csv} & Per-engine average lifetime, peak detection percentage, and
+      ever-detected IP count (\S\ref{sec:agreement_vs_chance}) \\
+    \texttt{group\_available\_fields.json} & Merged schema of every field across all provider
+      responses in the wave's report files (per-engine field groups collapsed to one
+      representative sample), for schema inspection without hand-parsing raw CSVs \\
+    \texttt{figure\_*.png}       & Generated graphs (aggregate, diff, per-host, top-engine detail) \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+All numerical results in Chapter~\ref{ch:results} are drawn directly from these files.
+
+% ============================================================
+\chapter{Results}
+\label{ch:results}
+% ============================================================
+
+This chapter presents empirical results from eight completed collection waves
+(\texttt{group\_wave\_1} through \texttt{group\_wave\_8}), covering 18\,428 TLScope-classified IP
+observations tracked on a predominantly three-day cadence (\S\ref{sec:collection_schedule}) over
+one-to-two-month windows between October 2025 and
+September 2026. Per-wave figures and raw statistics are available under each wave's
+\texttt{group\_analysis\_out\_dir/}; this chapter reports the aggregate and per-wave numbers drawn
+from them. The methodological caveats that bound how these numbers should be read --- ground-truth
+imperfection, sampling granularity, and selection bias among them --- are addressed together in
+\S\ref{sec:threats_to_validity} rather than repeated at each figure.
+
+\section{Detection Rate Overview}
+
+Table~\ref{tab:detection_overview} summarises, for each wave, how many TLScope-identified IPs were
+ever flagged by at least one tracked provider versus never flagged during the entire observation
+window.
+
+\begin{table}[h]
+  \centering
+  \caption{Detection outcome per wave: IPs never flagged by any provider versus ever detected.}
+  \label{tab:detection_overview}
+  \begin{tabular}{lrrrr}
+    \toprule
+    \textbf{Wave} & \textbf{Total IPs} & \textbf{Never detected} & \textbf{Ever detected} & \textbf{Never detected \%} \\
+    \midrule
+    1 & 2\,591 & 1\,900 & 691 & 73.3\% \\
+    2 & 2\,062 & 1\,507 & 555 & 73.1\% \\
+    3 & 2\,728 & 2\,188 & 540 & 80.2\% \\
+    4 & 2\,474 & 2\,144 & 330 & 86.7\% \\
+    5 & 1\,596 & 1\,390 & 206 & 87.1\% \\
+    6 & 2\,470 & 2\,079 & 391 & 84.2\% \\
+    7 & 2\,100 & 1\,772 & 328 & 84.4\% \\
+    8 & 2\,407 & 1\,987 & 420 & 82.6\% \\
+    \midrule
+    \textbf{Total} & \textbf{18\,428} & \textbf{14\,967} & \textbf{3\,461} & \textbf{81.2\%} \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+Across all eight waves, \textbf{81.2\% of TLScope-identified malicious IPs (14\,967 of 18\,428)
+were never flagged by any of the tracked providers} at any point during their observation window.
+This is the headline result of the thesis: the large majority of servers that active TLS
+fingerprinting identifies as malicious never surface in public threat intelligence feeds at all,
+independent of detection lag.
+
+The never-detected rate ranges from 73.1\% to 87.1\% across waves and is not flat: it rises with
+wave order from $\sim$73\% in waves 1--2 to a 82--87\% band from wave 4 onward. The correlation
+with wave order is substantial but, at eight waves, falls just short of conventional significance
+(Pearson $r = 0.704$, $p = 0.051$, $n = 8$) --- it should be read as a consistent direction of
+travel, not as an established effect. Part of the rise plausibly coincides with the Censys
+deactivation after wave 4 (\S\ref{sec:provider_availability}): the mean never-detected rate is
+78.3\% for waves 1--4 (Censys active) versus 84.5\% for waves 5--8 (Censys inactive), a difference
+that likewise does not reach significance with four waves on each side ($t = -1.85$, $p = 0.114$).
+Neither test settles whether the trend reflects a genuine ecosystem shift or the loss of a
+provider, and the honest summary is the weaker one: across this study's window, coverage shows no
+sign of improving, and the apparent decline is confounded with a change in what was being
+measured. Distinguishing the two requires either more waves or the restoration of Censys
+(\S\ref{ch:future_work}).
+
+\section{Detection Lag}
+
+Because collection runs once per cycle rather than continuously, detection lag is measured in units
+of one collection cycle rather than in continuous days. A cycle is 3 days for six of the eight
+waves, but only 1 day for wave 1 and 2 days for wave 5 (\S\ref{sec:collection_schedule}); ``zero
+lag'' is consequently a stricter, same-day claim for wave 1 than the up-to-3-day claim it represents
+for most other waves, and the figures below mix these two resolutions rather than reporting a
+single uniform unit. Of the 3\,461 IPs that were eventually detected at least
+once, 1\,523 (44.0\%) were flagged on the very first collection cycle (zero lag relative to the
+group's start date), while 1\,410 (40.7\%) were not detected on the first cycle but were flagged on
+a later one. The remaining IPs correspond to groups whose first available sample fell outside the
+expected collection schedule and are excluded from this lag breakdown.
+
+The immediate-detection fraction varies substantially by wave, from 27.6\% (wave 8) to 70.4\%
+(wave 5), with no consistent trend across waves (Pearson $r = -0.03$ against wave order). This
+variation is consistent with detection lag depending heavily on which specific hosting
+infrastructure and campaign type a given wave's IPs belong to, rather than on a fixed system-wide
+latency --- though the wave-1 figure in particular should be read against its finer 1-day cadence
+rather than compared at face value to waves on a 3-day cycle.
+
+\section{Indicator Lifetime}
+
+Per-engine lifetime and peak-detection statistics are computed for every distinct engine that
+appears in a provider's report --- for VirusTotal specifically, this means each of the
+third-party antivirus and blocklist engines VirusTotal aggregates internally (e.g.\ \emph{Criminal
+IP}, \emph{SOCRadar}, \emph{BitDefender}), rather than VirusTotal as a single aggregate. The
+analysis reports the five highest peak-detection engines per wave (\texttt{-t 5},
+Appendix~\ref{app:cli}). Exactly two engines appear in that set in every one of the eight waves ---
+\emph{Criminal IP} and \emph{alphaMountain.ai} --- and Table~\ref{tab:top_engine} tracks both,
+because they are consistent in opposite ways.
+
+\begin{table}[h]
+  \centering
+  \caption{Average indicator lifetime and peak detection percentage for the two engines present
+    among the five highest peak-detection engines in all eight waves.}
+  \label{tab:top_engine}
+  \begin{tabular}{lrrrr}
+    \toprule
+    & \multicolumn{2}{c}{\textbf{Criminal IP}} & \multicolumn{2}{c}{\textbf{alphaMountain.ai}} \\
+    \cmidrule(lr){2-3}\cmidrule(lr){4-5}
+    \textbf{Wave} & \textbf{Lifetime (days)} & \textbf{Max det.\ \%}
+                  & \textbf{Lifetime (days)} & \textbf{Max det.\ \%} \\
+    \midrule
+    1 & 8.5  & 17.9\% & 7.5  & 0.5\% \\
+    2 & 22.1 & 18.7\% & 33.6 & 1.7\% \\
+    3 & 25.5 & 12.8\% & 24.6 & 1.7\% \\
+    4 & 32.0 & 8.0\%  & 20.0 & 3.0\% \\
+    5 & 11.1 & 5.0\%  & 37.0 & 3.0\% \\
+    6 & 11.3 & 5.5\%  & 33.3 & 1.5\% \\
+    7 & 8.4  & 4.0\%  & 36.0 & 2.3\% \\
+    8 & 8.1  & 4.3\%  & 30.4 & 2.3\% \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+The two behave as near-opposites, and the contrast is the substantive result here. \emph{Criminal
+IP} is the \emph{broad} detector: it reaches by far the highest detection share of any engine
+(17.9\% in wave 1) but holds its indicators only briefly and erratically --- 8.1 to 32.0 days,
+almost a 4$\times$ spread --- and its peak share decays steadily across the study, from $\sim$18\%
+in waves 1--2 to $\sim$4--8\% from wave 4 onward. \emph{alphaMountain.ai} is the \emph{persistent}
+detector: it never exceeds 3.0\% of a wave, but once it flags an IP it holds that flag for 20--37
+days in every wave after the first. Breadth and persistence are therefore not merely uncorrelated
+in this dataset; among the only two engines present throughout, they are inversely related.
+
+The remaining engines turn over. \emph{SOCRadar} appears in seven of eight waves (1--7; average
+lifetime 7.9--32.4 days); \emph{AbuseIPDB} (waves 2, 6, 7) and \emph{Gridinsoft} (waves 6--8) in
+three each; \emph{ThreatFox} (1, 3), \emph{Fortinet} (3, 4) and \emph{ESET} (5, 8) in two each; and
+\emph{Trustwave}, \emph{CRDF}, \emph{MalwareURL}, \emph{Seclookup} and \emph{Chong Lua Dao} in one
+wave apiece. Thirteen distinct engines occupy the 40 available slots across the study, so which
+engines are actively contributing detections is itself unstable over an eleven-month window --- a
+point that matters for anyone treating a specific engine's coverage as a fixed property.
+
+\section{Provider-Level Coverage}
+\label{sec:provider_coverage}
+
+The results above operate mostly at the level of VirusTotal's individual aggregated engines, since
+those are what compete for the highest per-wave detection percentages. It is also useful to ask the
+question the six named providers in \S\ref{ch:introduction} were originally chosen to answer
+directly: of the 3\,461 ever-detected IPs, how many did each \emph{standalone} provider (i.e.\ every
+provider other than VirusTotal, whose own contribution is the union of the many engines already
+covered above) account for on its own? Table~\ref{tab:provider_coverage} answers this by summing
+each provider's ever-detected count (\texttt{EverDetectedCount} in \texttt{engine\_summary.csv})
+across every wave in which it was active.
+
+\begin{table}[h]
+  \centering
+  \caption{Aggregate ever-detected IP count for each standalone (non-VirusTotal) provider, summed
+    across every wave in which it was active. Censys's percentage is of the 9\,855 IPs in waves
+    1--4, the only waves in which it was queried (\S\ref{sec:provider_availability}); all other
+    percentages are of the full 18\,428-IP population.}
+  \label{tab:provider_coverage}
+  \begin{tabular}{lrrr}
+    \toprule
+    \textbf{Provider} & \textbf{Ever-detected IPs} & \textbf{\% of applicable population} & \textbf{Avg.\ lifetime (days)} \\
+    \midrule
+    AbuseIPDB  & 180 & 0.98\%                  & 23.8 \\
+    ThreatFox  & 259 & 1.40\%                  & 4.7  \\
+    Censys     & 16  & 0.16\% (waves 1--4 only) & 3.4  \\
+    OpenPhish  & 2   & 0.01\%                  & 7.5  \\
+    Cinsscore  & 0   & 0.00\%                  & ---  \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+Two results stand out. First, \textbf{Cinsscore never flagged a single one of the 18\,428 tracked
+IPs, in any of the eight waves}: as a lightweight, list-only blacklist (\S\ref{ch:providers}), it
+contributes nothing to this dataset's coverage of TLScope-identified infrastructure. Second,
+\textbf{OpenPhish flagged only 2 IPs in total}, both in wave 3. This is best read as a construct
+mismatch rather than a coverage failure: OpenPhish is a phishing-\emph{URL} feed resolved to IPs by
+DNS, while TLScope's ground truth targets TLS-fingerprinted C2/botnet server infrastructure
+(\S\ref{ch:background}) --- largely disjoint threat categories that happen to share the same
+IP-address representation. By contrast, ThreatFox and AbuseIPDB are genuine, if modest, contributors
+(1.40\% and 0.98\% of all tracked IPs respectively), consistent with their occasional appearances in
+the top-3 tables above. Censys's 0.16\% figure cannot be compared on equal terms with the others,
+since it reflects only half the study's waves and roughly half its IPs; whether Censys would have
+continued at a similarly low rate, or behaved differently, for waves 5--8 is unknown
+(\S\ref{sec:threats_to_validity}). Together, these five providers account for 457 of the 3\,461
+ever-detected IPs (13.2\%); the remaining 86.8\% of detections are attributable to VirusTotal's
+aggregated third-party engines discussed above, confirming that VirusTotal --- not the five
+standalone providers --- is the dominant source of whatever coverage this dataset's six-provider
+design does achieve.
+
+\section{Inter-Provider Agreement}
+
+Table~\ref{tab:agreement} aggregates, across all eight waves, how many detected engines flagged
+each of the 3\,461 ever-detected IPs.
+
+\begin{table}[h]
+  \centering
+  \caption{Number of detecting engines per ever-detected IP, aggregated across all eight waves.}
+  \label{tab:agreement}
+  \begin{tabular}{lrr}
+    \toprule
+    \textbf{Engines agreeing} & \textbf{IP count} & \textbf{\% of ever-detected} \\
+    \midrule
+    Exactly 1  & 2\,903 & 83.9\% \\
+    Exactly 2  & 338    & 9.8\%  \\
+    Exactly 3  & 99     & 2.9\%  \\
+    4 or more  & 121    & 3.5\%  \\
+    \midrule
+    \textbf{Total} & \textbf{3\,461} & \textbf{100.0\%} \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+Agreement between engines is low: 83.9\% of ever-detected IPs are flagged by exactly one engine,
+and fewer than 4\% are flagged by four or more. This confirms that different engines cover largely
+distinct, only lightly overlapping subsets of the malicious IP population, directly answering RQ3.
+
+One clear exception recurs across every wave: the pairwise Jaccard similarity between
+\emph{BitDefender} and \emph{G-Data} is exactly 1.0 in all eight waves --- every IP one flags, the
+other flags too, with no exceptions in any wave. This is consistent with the two commercial
+products sharing the same underlying detection engine, which is a documented licensing
+relationship between the two vendors, rather than coincidental correlated detection.
+
+\subsection{Agreement Versus a Chance Baseline}
+\label{sec:agreement_vs_chance}
+
+The low overlap in Table~\ref{tab:agreement} is consistent with two different explanations that a
+purely descriptive count cannot distinguish: either individual engines simply detect few IPs each
+(so singleton detections would dominate even if every engine's hits were an independent random
+draw), or engines are additionally \emph{specialising} --- systematically detecting different IPs
+from one another, beyond what their individual detection rates alone would predict. To separate
+these, for every wave and every engine $e$ with at least one detection, the marginal probability
+$p_e$ that $e$ ever flags a given ever-detected IP is estimated as $p_e = |D_e| / N$, where $N$ is
+that wave's ever-detected count (Table~\ref{tab:detection_overview}) and $D_e$ is as defined in
+\S\ref{sec:notation}. Treating each engine as an independent Bernoulli$(p_e)$ draw per IP, the
+Poisson binomial distribution over the number of engines flagging a given IP gives a
+chance-baseline prediction for the fraction of IPs flagged by exactly one engine, which can be
+compared against the value actually observed in that wave.
+
+\begin{table}[h]
+  \centering
+  \caption{Observed versus chance-predicted fraction of ever-detected IPs flagged by exactly one
+    engine, per wave. The chance prediction uses each engine's own marginal detection rate for that
+    wave (Poisson binomial model, \S\ref{sec:agreement_vs_chance}); observed exceeding predicted
+    indicates specialisation beyond what individually low detection rates alone would produce.}
+  \label{tab:agreement_chance}
+  \begin{tabular}{lrrrr}
+    \toprule
+    \textbf{Wave} & \textbf{Engines} & \textbf{Observed} & \textbf{Chance-predicted} & \textbf{Ratio} \\
+    \midrule
+    1 & 21 & 86.8\% & 59.1\% & 1.47$\times$ \\
+    2 & 26 & 74.8\% & 43.1\% & 1.74$\times$ \\
+    3 & 36 & 81.1\% & 37.0\% & 2.19$\times$ \\
+    4 & 31 & 86.7\% & 43.2\% & 2.00$\times$ \\
+    5 & 23 & 91.3\% & 49.0\% & 1.86$\times$ \\
+    6 & 33 & 88.7\% & 50.5\% & 1.76$\times$ \\
+    7 & 33 & 80.8\% & 39.7\% & 2.03$\times$ \\
+    8 & 31 & 86.7\% & 47.4\% & 1.83$\times$ \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+In every one of the eight waves, the observed exactly-one-engine fraction exceeds the chance
+prediction by a wide and consistent margin --- 1.47$\times$ to 2.19$\times$ --- rather than tracking
+it closely, as it would if singleton detections were merely an artefact of each engine's own low
+individual detection rate. This is direct evidence that engines are not drawing independently from
+a shared population of malicious IPs: even after accounting for how rarely each engine detects
+\emph{anything}, IPs that one engine detects are still less likely than chance to also be detected
+by another. Combined with the near-total BitDefender/G-Data overlap immediately above, the two
+findings together indicate that inter-provider disagreement in this dataset is not simple
+sparsity, but reflects real specialisation across largely non-redundant detection surfaces, with
+shared-engine licensing relationships (as with BitDefender/G-Data) the one identifiable exception.
+The independence assumption underlying the chance baseline is itself a simplification --- it treats
+every ever-detected IP as facing identical per-engine marginal probabilities, ignoring any
+correlation induced by shared hosting infrastructure across IPs within a wave --- so the reported
+ratios should be read as a lower bound on the true degree of specialisation, not a precise estimate.
+
+\section{Temporal Evolution}
+
+Wave 4's aggregate series (14 collection points over 39 days) is representative of the general
+pattern observed across waves: the percentage of IPs with at least one malicious vote stays within
+a narrow band (9.6\%--12.4\%) for the full duration, with no sustained upward or downward trend
+(Figure~\ref{fig:wave4_percentage}). The step-to-step net change (\texttt{diff}) oscillates between
+roughly $-14$ and $+22$ aggregate votes per cycle, with positive and negative contributions of
+comparable magnitude at every step (Figure~\ref{fig:wave4_diff}) --- new detections and lost
+detections roughly balance rather than accumulating in one direction. This suggests that, over a
+one-to-two-month window, provider coverage of a given wave's IPs reaches a rough equilibrium
+quickly rather than continuing to climb as feeds ``catch up'' over time.
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.85\linewidth]{wave4_percentage.png}
+  \caption{Percentage of wave 4 IPs with at least one malicious vote, per collection cycle.}
+  \label{fig:wave4_percentage}
+\end{figure}
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.85\linewidth]{wave4_diff.png}
+  \caption{Net, positive, and negative components of the step-to-step aggregate vote change for
+    wave 4.}
+  \label{fig:wave4_diff}
+\end{figure}
+
+% ============================================================
+\chapter{Discussion}
+\label{ch:discussion}
+% ============================================================
+
+\section{Answers to the Research Questions}
+\label{sec:rq_answers}
+
+Before interpreting the results further, this section states directly what the measurements in
+Chapter~\ref{ch:results} say about each of the three research questions posed in
+\S\ref{ch:introduction}. A precondition applies to all three: they are answerable only for the
+18.8\% of tracked IPs a provider ever flagged, since the remaining 81.2\% produce no detection
+event to measure lag, lifetime, or agreement on. That censoring is itself the single largest
+finding, and it bounds every answer below.
+
+\textbf{RQ1 (detection lag) --- bimodal, and mostly immediate when it happens at all.} Of the
+3\,461 ever-detected IPs, 44.0\% were flagged on the first collection cycle and 40.7\% only on a
+later one (\S\ref{ch:results}); the remainder fall outside the schedule and are excluded. Providers
+therefore do not converge on a characteristic reaction time: an IP is either already known when
+TLScope surfaces it, or it waits. The immediate-detection share swings from 27.6\% to 70.4\% across
+waves with no trend over time ($r = -0.01$), which points to the composition of each wave's
+infrastructure rather than to any fixed ecosystem latency. The lag is measured in collection cycles
+rather than days, and those cycles are not the same length in every wave
+(\S\ref{sec:collection_schedule}), so this answer is directional rather than a precise interval.
+
+\textbf{RQ2 (indicator persistence) --- highly variable, and inversely related to how widely an
+engine detects.} The two engines present in every wave's top five answer this most directly
+(Table~\ref{tab:top_engine}): \emph{Criminal IP} detects broadly (peaking at 17.9\% of a wave) but
+holds indicators only 8.1--32.0 days, an almost 4$\times$ spread, with its share decaying across the
+study; \emph{alphaMountain.ai} never exceeds 3.0\% of a wave yet retains flags for 20--37 days in
+every wave after the first. Across the five standalone providers, average lifetimes span 3.4 days
+(Censys) to 23.8 days (AbuseIPDB) (Table~\ref{tab:provider_coverage}). No engine is simultaneously
+broad and persistent; breadth and persistence trade off against each other, and the absolute
+lifetime also tracks the wave --- consistent with retention being driven both by an engine's own
+policy and by what a given batch of infrastructure was doing.
+
+\textbf{RQ3 (inter-provider agreement) --- near-absent, and by specialisation rather than by
+scarcity.} 83.9\% of ever-detected IPs are flagged by exactly one engine and under 4\% by four or
+more (Table~\ref{tab:agreement}). The chance-baseline comparison
+(\S\ref{sec:agreement_vs_chance}) shows this is not merely an artefact of each engine detecting
+little: the observed single-engine share exceeds what independent draws at each engine's own
+detection rate would predict, by 1.47$\times$--2.19$\times$ in every wave. Engines are covering
+systematically different subsets. The one exception is BitDefender and G-Data, identical in all
+eight waves (Jaccard = 1.0), which reflects a shared underlying engine rather than agreement
+between independent assessments.
+
+\section{Coverage Gap between TLScope and Public Feeds}
+
+The 81.2\% never-detected rate (Table~\ref{tab:detection_overview}) quantifies the gap between
+what TLScope identifies through active TLS scanning and what public feeds cover: four out of five
+TLScope-flagged malicious servers never appear in any of the six tracked providers, at any
+granularity, over a one-to-two-month window. This gap has been hypothesised by prior work (e.g.,
+MANTIS \cite{deniz2025mantis} detects 5$\times$ more malicious domains than VirusTotal alone), and
+the measurement here is consistent in direction and, if anything, larger in magnitude --- though
+the two are not directly comparable, since MANTIS measures domains and daily detection rate,
+while this thesis measures IPs never detected across an entire multi-week window.
+
+\section{Provider-Specific Behaviours}
+
+The per-engine results (Table~\ref{tab:top_engine}) show that no single engine dominates
+consistently across both detection lag and lifetime. Only two engines --- \emph{Criminal IP} and
+\emph{alphaMountain.ai} --- appear in every wave's top five, and they split the two properties
+between them rather than combining them: the broad detector is the impersistent one and the
+persistent detector is the narrow one. \emph{Criminal IP}'s average lifetime also varies by nearly
+4$\times$ across waves (8.1--32.0 days) while its peak detection percentage trends downward in
+later waves --- evidence against a single fixed detection-lag or lifetime profile per engine, and
+more consistent with behaviour that depends on the specific hosting infrastructure and campaign
+type present in a given wave. The absence of Censys, Cinsscore, and OpenPhish from the top-engine
+tables across all eight waves has two distinct causes rather than one, as Table
+\ref{tab:provider_coverage} (\S\ref{sec:provider_coverage}) shows: Cinsscore and OpenPhish were
+tracked in every run but genuinely detected almost nothing (0 and 2 IPs respectively, out of
+18\,428), whereas Censys was tracked in only half the waves before being deactivated in the
+collection tool (\S\ref{sec:provider_availability}) and so cannot be judged against the other four
+on equal terms. In all three cases, though, their practical contribution to catching
+TLScope-identified IPs in this dataset is small relative to VirusTotal's aggregated third-party
+engines, which account for 86.8\% of every detection made (\S\ref{sec:provider_coverage}). The
+chance-baseline comparison in
+\S\ref{sec:agreement_vs_chance} reinforces this picture quantitatively: the observed single-engine
+detection rate exceeds what each engine's own marginal detection rate alone would predict by
+1.47$\times$--2.19$\times$ in every wave, so the low agreement in Table~\ref{tab:agreement} reflects
+engines specialising in largely distinct subsets of the malicious IP population, not merely each
+engine independently detecting few IPs.
+
+\section{Indicator Expiry Mechanisms}
+
+Indicators expire for fundamentally different reasons across providers:
+\begin{enumerate}
+  \item The underlying threat has genuinely ended (infrastructure taken down).
+  \item Provider retention policy removed the entry.
+  \item Classification model updated (concept drift \cite{li2025conceptdrift}).
+\end{enumerate}
+The thesis's temporal tracking distinguishes the first two cases empirically but cannot directly
+identify the third.
+
+\section{Threats to Validity}
+\label{sec:threats_to_validity}
+
+\subsection{Internal Validity}
+
+\textbf{Ground-truth imperfection.} TLScope reports 91\% precision for malicious server detection
+(\S\ref{ch:background}), so up to $\sim$9\% of the 18\,428 tracked IPs could be TLScope false
+positives --- benign servers that no provider should ever flag. Any such IP correctly contributes to
+the 81.2\% never-detected figure for reasons unrelated to feed coverage, meaning that figure is an
+upper bound on the true ecosystem coverage gap, not an unbiased point estimate. Because a benign IP
+could still be flagged by a provider for an unrelated reason (e.g.\ shared hosting with a genuinely
+malicious neighbour), the direction of the resulting bias on the never-detected rate specifically is
+downward (toward overstating the gap), while its effect on detection lag and lifetime is unsigned.
+
+\textbf{Sampling granularity.} The collection cadence caps the resolution of every lag and lifetime
+measurement, and this cadence is not uniform across the study: $\Delta = 3$ days for six of the
+eight waves, but $\Delta = 1$ day for wave 1 and $\Delta = 2$ days for wave 5
+(\S\ref{sec:collection_schedule}). The 44.0\% ``zero lag'' figure (\S\ref{ch:results}) is therefore
+an upper bound on true same-day detection for the six 3-day waves --- some of those IPs may
+actually have been detected 1--2 days after TLScope but before the next scheduled sample, and would
+be indistinguishable from a same-cycle detection --- while for wave 1 specifically, ``zero lag''
+is a same-day claim with no such slack. Aggregating cycle counts across waves with different
+$\Delta$ therefore mixes two different time resolutions into one headline percentage, which should
+be read as directionally informative rather than as a single precisely-defined quantity.
+
+\textbf{Inconsistent provider coverage.} Censys querying was deactivated in the collection tool
+after wave 4 (\S\ref{sec:provider_availability}) and never restored, so the ``six providers''
+framing used throughout this thesis holds fully only for waves 1--4 (9\,855 IPs); waves 5--8
+(8\,573 IPs) were monitored by five providers. Because Censys contributed only 16 detections in the
+waves it was active for (\S\ref{sec:provider_coverage}), its removal is unlikely to explain most of
+the coverage gap on its own, but it mechanically raises the never-detected rate for every wave after
+it by removing one chance at detection per IP, and is a plausible partial contributor to the
+increasing never-detected trend noted in \S\ref{ch:results}. No equivalent gap exists for the other
+five providers, which returned a live (possibly zero-valued) result for every IP in every wave they
+were configured for.
+
+\subsection{Construct Validity}
+
+\textbf{IP churn.} An IP address is not a stable proxy for a single threat: hosting providers
+reassign addresses, and a formerly malicious IP can turn benign (or vice versa) within the
+one-to-two-month observation window without any change of classification target. Both TLScope's
+ground-truth snapshot and every provider's periodic classification could be tracking different
+physical infrastructure occupying the same address at different points in time, which this thesis's
+IP-level tracking cannot distinguish from a genuine detection or expiry event.
+
+\textbf{No benign control set.} All 18\,428 tracked IPs are drawn from a single malicious-only
+ground truth; this thesis measures each provider's recall-like coverage of that population but does
+not estimate false-positive rate or precision, since no known-benign IPs are tracked in parallel.
+
+\textbf{Provider-internal drift.} The set of individual antivirus/blocklist engines VirusTotal
+aggregates is decided by VirusTotal, not by this thesis, and can change during the collection
+window --- an engine can be added, removed, or re-licensed, as the identical BitDefender/G-Data
+detections in \S\ref{ch:results} illustrate. Such a change would appear in the data as a shift in
+per-engine coverage with no corresponding shift in the underlying threat.
+
+\subsection{External Validity}
+
+\textbf{Detection-methodology selection bias.} TLScope selects on TLS handshake behaviour. Malicious
+infrastructure that TLScope's fingerprinting approach does not surface (e.g.\ non-TLS abuse, or
+servers that closely mimic benign TLS stacks) is structurally invisible to this study. The measured
+coverage gap therefore characterises ecosystem response specifically to the subset of malicious
+infrastructure that active TLS fingerprinting happens to find --- which may be exactly the subset
+that signature- or report-based feeds (e.g.\ ThreatFox, AbuseIPDB) are least tuned to catch. This
+concern is compounded by the study being IPv4-only, since IPv6 infrastructure is entirely out of
+scope (\S\ref{ch:future_work}).
+
+\textbf{Single vantage point.} All provider queries are issued from one network location using
+standard REST APIs and a single API key per provider. Provider responses could differ by client
+identity, subscription tier, or geographic origin of the query, none of which this thesis observes
+or controls for.
+
+% ============================================================
+\chapter{Future Work}
+\label{ch:future_work}
+% ============================================================
+
+\begin{description}
+  \item[IPv6 extension] The study covers IPv4 only. As IPv6 adoption grows and malicious
+    infrastructure migrates to IPv6, extending tracking to IPv6 addresses using 6Sense-style
+    scanning \cite{williams2024sixsense} would be valuable.
+  \item[Restore or replace Censys] Censys was deactivated in the collection tool after wave 4
+    (\S\ref{sec:provider_availability}) without a recorded rationale. Re-enabling it, or replacing
+    it with a comparable active-scanning feed, would restore genuine six-provider coverage for
+    future waves and remove the confound identified in \S\ref{sec:threats_to_validity}.
+  \item[Provider health monitoring] Neither the Censys deactivation nor a transient per-IP failure
+    (\texttt{cs\_get\_url\_report}/\texttt{process\_cs\_report} in \texttt{vendors.py} silently
+    drop the field on any exception, with no fallback value) would be visible without inspecting
+    the output schema by hand, as this thesis did. Logging or alerting when a configured provider
+    stops returning results for an extended period would catch this class of issue as it happens
+    rather than after the fact.
+  \item[Harmonised sampling cadence] Waves 1 and 5 ran on 1-day and 2-day cadences respectively
+    while the rest used 3 days (\S\ref{sec:collection_schedule}). Standardising on a single cadence
+    for all future waves would make cross-wave detection-lag comparisons directly commensurable
+    without the caveats in \S\ref{sec:threats_to_validity}.
+  \item[Additional providers] Adding more providers (e.g., Shodan, IPinfo, AlienVault OTX) would
+    give a more complete view of the threat intelligence ecosystem.
+  \item[Automated provider profiling] Using MANTIS-style infrastructure graph features
+    \cite{deniz2025mantis} to predict which providers are likely to detect a given IP, and when.
+  \item[AS-level feature fusion] \S\ref{ch:related_work} draws a direct analogy between BEAM's
+    \cite{chen2024beam} per-AS ``routing role'' embeddings and the notion of a per-IP ``threat
+    role'' across providers, but this thesis never tests it: adding AS/BGP-derived features
+    (announcing AS, role stability, peer diversity) to the per-engine analysis in
+    \S\ref{ch:results} could test whether the specialisation observed in
+    \S\ref{sec:agreement_vs_chance} correlates with hosting-infrastructure role rather than being
+    engine-idiosyncratic.
+  \item[Latency-based infrastructure clustering] Similarly, CalcuLatency's \cite{ramesh2024calcuLatency}
+    cross-layer latency fingerprinting is discussed in \S\ref{ch:related_work} as a way to detect
+    IPs sharing the same hosting provider, but this thesis does not apply it. Clustering
+    TLScope-identified IPs by latency fingerprint would let a future wave test directly whether
+    IPs in the same cluster share detection lag and lifetime, rather than only observing that
+    lifetime varies by wave (\S\ref{ch:results}) without knowing why.
+  \item[Density-aware validation of the coverage gap] \S\ref{ch:related_work} interprets the
+    81.2\% never-detected rate as consistent with TLScope-identified IPs occupying sparse regions
+    of provider feature space, drawing on Tian et al.'s \cite{tian2025density} finding that sparse
+    regions are where malware classifiers fail hardest. That interpretation is not tested in this
+    thesis: applying their density-compression measurement to whatever feature representation a
+    given provider's classifier uses (where accessible) would confirm or refute it directly,
+    rather than leaving it as a plausible but unverified explanation.
+  \item[Ground truth diversification] Using additional active-scanning ground truths beyond TLScope
+    to validate the findings and reduce potential biases.
+  \item[Indicator quality scoring] Implementing RAPIER-style \cite{qing2024rapier} confidence
+    scoring to distinguish high-confidence from low-confidence provider detections.
+\end{description}
+
+% ============================================================
+\chapter{Conclusion}
+\label{ch:conclusion}
+% ============================================================
+
+This thesis presents NetScan, a longitudinal study of malicious IP indicator lifetimes across six
+public threat intelligence providers. Using TLScope-classified malicious IP addresses as ground
+truth, eight groups of 1\,596--2\,728 IPs each (18\,428 IPs in total) were tracked, on a
+predominantly 3-day cadence, for one to two months each.
+
+The study is motivated by a fundamental question: given that TLScope has already identified a
+server as malicious, how does the public threat intelligence ecosystem respond? The three research
+questions --- detection lag, indicator persistence, and inter-provider agreement --- together
+characterise the temporal effectiveness of public feeds relative to a ground truth produced by
+active TLS scanning.
+
+The results demonstrate a substantial coverage gap: 81.2\% of TLScope-identified malicious IPs were
+never flagged by any tracked provider. Among the IPs that were eventually detected, 44.0\% were
+flagged with zero lag and 40.7\% only after missing the first collection cycle, and agreement
+between detecting engines is low --- 83.9\% of ever-detected IPs are flagged by exactly one engine,
+with the notable exception of BitDefender and G-Data, whose detections are identical
+(Jaccard~=~1.0) in every single wave. Together these results give a quantitative, longitudinal
+answer to where public threat intelligence feeds succeed and where they fall structurally short
+relative to specialised active TLS scanning, and provide a concrete benchmark --- rather than a
+prediction --- for future threat intelligence system evaluation.
+
+Two further findings qualify the headline number. First, the never-detected rate is not flat over
+the study period: it rises from $\sim$73\% in the earliest waves to a 82--87\% band from wave
+4 onward, a trend that is consistent in direction but, across only eight waves, stops just short of
+conventional significance (Pearson $r = 0.704$, $p = 0.051$) and is in any case confounded with
+Censys being deactivated in the collection tool after wave 4 and never restored
+(\S\ref{sec:provider_availability}) --- a methodological change this thesis discovered by auditing
+the collected data rather than one that was flagged at the time. Second, among the five standalone
+providers evaluated independently of VirusTotal's aggregated engines, Cinsscore detected none of the
+18\,428 tracked IPs and OpenPhish detected only 2, so effectively all of this dataset's coverage of
+TLScope-identified infrastructure traces back to VirusTotal and, to a lesser extent, ThreatFox and
+AbuseIPDB (\S\ref{sec:provider_coverage}). Both findings point to the same conclusion as the
+headline result: public feed coverage of active-scanning-identified malicious infrastructure is not
+just incomplete but unevenly and inconsistently so, across providers and across time.
+
+% ============================================================
+%  BACK MATTER
+% ============================================================
+
+\appendix
+
+\chapter{Configuration Reference}
+\label{app:config}
+
+API keys are stored in a \texttt{.env} file in the project root. Copy \texttt{.env\_ex} and fill
+in the required credentials:
+\begin{lstlisting}[language=bash, caption={Example .env configuration}]
+VIRUSTOTAL = "VIRUSTOTAL Key::limit"
+ABUSEIPDB  = "ABUSEIPDB Key::limit"
+CENSYS     = "CENSYS Key||secret::limit"
+THREATFOX  = "THREATFOX Key::limit"
+# No API key needed for these services; set to "local"
+CINSSCORE  = "local::10000"
+OPENPHIS   = "local::10000"
+\end{lstlisting}
+
+Each value follows the form \texttt{key||secret::rate\_limit}. \texttt{runfetch.py} splits on
+\texttt{::} to separate the credential from the per-service rate limit, then on \texttt{||} to
+separate key from secret for the one provider that needs both (Censys). Cinsscore and OpenPhish
+require no API key --- they use publicly accessible list endpoints --- but still need an entry, set
+to \texttt{local}, because the service is registered by the presence of its environment variable.
+Note that the OpenPhish variable is spelled \texttt{OPENPHIS} in the codebase; the name must match
+exactly for the service to be picked up. Censys is present in \texttt{.env\_ex} but is not read in
+the current configuration, since it is commented out of the active service list
+(\S\ref{sec:provider_availability}).
+
+\chapter{CLI Reference}
+\label{app:cli}
+
+\section{runfetch.py}
+
+\begin{lstlisting}[language=bash]
+python runfetch.py -f <folder> [-w WORKERS] [-vw VT_WORKERS]
+                   [-q QUEUE_SIZE] [-sf START_FROM] [-dbg]
+\end{lstlisting}
+
+\texttt{-w} sets the number of producer workers (Section~\ref{ch:implementation}); \texttt{-vw}
+sets the number of VirusTotal-polling consumer workers, independently of \texttt{-w}.
+
+\section{runanalysis.py}
+
+\begin{lstlisting}[language=bash]
+python runanalysis.py -f <folder> [-t TOP_ENGINES] [-d DAY_DIFF] [-w WORKERS]
+                      [-q QUEUE_SIZE] [-o OUTPUT_DIR] [--do_group_graphs]
+\end{lstlisting}
+
+\texttt{-t} sets how many of the highest peak-detection engines get per-engine figures and
+summary rows (default 3; the analyses reported in Chapter~\ref{ch:results} were run with
+\texttt{-t 5}, and the per-wave \texttt{top\_engines} value is recorded in each wave's
+\texttt{out\_logs.txt}). Note that this setting affects only which engines are singled out for
+figures and the \texttt{Report Stats} block: the aggregate, agreement and chance-baseline results
+are computed over \emph{all} engines in \texttt{engine\_summary.csv} and are unchanged by it.
+\texttt{--do\_group\_graphs}
+additionally plots a per-IP malicious-vote figure for every group in the run; it is off by default
+since it produces one figure per group rather than one aggregate figure per statistic, and is
+impractical for combined multi-wave runs.
+
+Configuration overrides are read at two levels. A \texttt{config.json} placed directly inside
+\texttt{<folder>} overrides the corresponding command-line value or default for the whole run, for
+any key matching a CLI argument name. A \texttt{config.json} placed inside an individual
+\emph{sub-group} directory overrides that key for that sub-group only, leaving the rest of the wave
+on the run-level value; unknown keys are reported and ignored. The per-sub-group level is the one
+used in practice: it is how waves 1 and 5 were collected on 1-day and 2-day cadences
+(\S\ref{sec:collection_schedule}) while the run default stayed at 3, and the resulting per-group
+values are echoed into \texttt{out\_logs.txt} as \texttt{group\_overrides} so the effective cadence
+of each sub-group is recoverable from the analysis output alone. Missing keys or a missing file
+silently fall back to the CLI/default
+value. This allows a group-specific setting (for example, an irregular actual scan cadence) to be
+recorded once alongside the group's data rather than passed by hand on every invocation.
+
+% --- Bibliography ---
+\cleardoublepage
+\addcontentsline{toc}{chapter}{Bibliography}
+
+\begin{thebibliography}{99}
+
+\bibitem{theofanous2024tlscope}
+A.~Theofanous, E.~Papadogiannaki, A.~Shevtsov, and S.~Ioannidis,
+``Fingerprinting the Shadows: Unmasking Malicious Servers with Machine Learning-Powered TLS Analysis,''
+in \textit{Proc.\ ACM Web Conference (WWW)}, 2024, pp.\ 1933--1944.
+DOI:~10.1145/3589334.3645719.
+
+\bibitem{antonakakis2010notos}
+M.~Antonakakis, R.~Perdisci, D.~Dagon, W.~Lee, and N.~Feamster,
+``Building a Dynamic Reputation System for DNS,''
+in \textit{Proc.\ 19th USENIX Security Symposium}, 2010, pp.\ 273--290.
+
+\bibitem{bilge2011exposure}
+L.~Bilge, E.~Kirda, C.~Kruegel, and M.~Balduzzi,
+``EXPOSURE: Finding Malicious Domains Using Passive DNS Analysis,''
+in \textit{Proc.\ NDSS 2011}, Feb.\ 2011.
+
+\bibitem{deniz2025mantis}
+F.~Deniz, M.~Nabeel, T.~Yu, and I.~Khalil,
+``MANTIS: Detection of Zero-Day Malicious Domains Leveraging Low Reputed Hosting Infrastructure,''
+in \textit{Proc.\ 2025 IEEE Symposium on Security and Privacy (S\&P)}, 2025, pp.\ 1789--1807.
+DOI:~10.1109/SP61157.2025.00067.
+
+\bibitem{li2025conceptdrift}
+A.~S.~Li, A.~Iyengar, A.~Kundu, and E.~Bertino,
+``Revisiting Concept Drift in Windows Malware Detection: Adaptation to Real Drifted Malware with Minimal Samples,''
+in \textit{Proc.\ 32nd NDSS 2025}, Feb.\ 2025.
+
+\bibitem{qing2024rapier}
+Y.~Qing, Q.~Yin, X.~Deng, Y.~Chen, Z.~Liu, K.~Sun, K.~Xu, J.~Zhang, and Q.~Li,
+``Low-Quality Training Data Only? A Robust Framework for Detecting Encrypted Malicious Network Traffic,''
+in \textit{Proc.\ 31st NDSS 2024}, Feb.\ 2024.
+
+\bibitem{tian2025density}
+J.~Tian, W.~Kong, D.~Gao, T.~Wang, T.~Gu, K.~Qiu, Z.~Wang, and X.~Kuang,
+``Density Boosts Everything: A One-stop Strategy for Improving Performance, Robustness, and Sustainability of Malware Detectors,''
+in \textit{Proc.\ 32nd NDSS 2025}, Feb.\ 2025.
+
+\bibitem{williams2024sixsense}
+G.~Williams, M.~Erdemir, A.~Hsu, S.~Bhat, A.~Bhaskar, F.~Li, and P.~Pearce,
+``6Sense: Internet-Wide IPv6 Scanning and its Security Applications,''
+in \textit{Proc.\ 33rd USENIX Security Symposium}, 2024, pp.\ 2281--2298.
+
+\bibitem{chen2024beam}
+Y.~Chen, Q.~Yin, Q.~Li, Z.~Liu, K.~Xu, Y.~Xu, M.~Xu, Z.~Liu, and J.~Wu,
+``Learning with Semantics: Towards a Semantics-Aware Routing Anomaly Detection System,''
+in \textit{Proc.\ 33rd USENIX Security Symposium}, 2024, pp.\ 5143--5160.
+
+\bibitem{ramesh2024calcuLatency}
+R.~Ramesh, P.~Winter, S.~Korman, and R.~Ensafi,
+``CalcuLatency: Leveraging Cross-Layer Network Latency Measurements to Detect Proxy-Enabled Abuse,''
+in \textit{Proc.\ 33rd USENIX Security Symposium}, 2024, pp.\ 2263--2280.
+
+\bibitem{zhang2024staleglue}
+Y.~Zhang, B.~Liu, H.~Duan, M.~Zhang, X.~Li, F.~Shi, C.~Xu, and E.~Alowaisheq,
+``Rethinking the Security Threats of Stale DNS Glue Records,''
+in \textit{Proc.\ 33rd USENIX Security Symposium}, 2024, pp.\ 1261--1277.
+
+\bibitem{zhang2024resolverfuzz}
+Q.~Zhang, X.~Bai, X.~Li, H.~Duan, Q.~Li, and Z.~Li,
+``ResolverFuzz: Automated Discovery of DNS Resolver Vulnerabilities with Query-Response Fuzzing,''
+in \textit{Proc.\ 33rd USENIX Security Symposium}, 2024, pp.\ 4729--4746.
+
+\bibitem{jarm2020}
+Salesforce Engineering,
+``JARM: A Solid TLS Fingerprinting Tool,''
+\url{https://engineering.salesforce.com/easily-identify-malicious-servers-on-the-internet-with-jarm-e095edac525a}, 2020.
+
+\end{thebibliography}
+
+\end{document}

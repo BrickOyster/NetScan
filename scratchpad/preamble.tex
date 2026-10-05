@@ -1,0 +1,111 @@
+% ============================================================
+% Thesis: Tracking the Lifetime of Malicious Indicators
+%         in Public Threat Intelligence Feeds
+% Author: Dimitris Keramidas
+% ============================================================
+\documentclass[12pt, a4paper, twoside]{report}
+
+% --- Encoding & Language ---
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[english, greek]{babel}
+\usepackage{alphabeta}          % Allow Greek letters in math mode
+
+% --- Typography ---
+\usepackage{lmodern}
+\usepackage{microtype}
+\usepackage{setspace}
+\onehalfspacing
+
+% --- Page Geometry ---
+\usepackage[
+  a4paper,
+  top=2.5cm, bottom=2.5cm,
+  inner=3cm, outer=2cm,
+  headheight=15pt
+]{geometry}
+
+% --- Headers / Footers ---
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[LE,RO]{\thepage}
+\fancyhead[LO]{\nouppercase{\rightmark}}
+\fancyhead[RE]{\nouppercase{\leftmark}}
+\renewcommand{\headrulewidth}{0.4pt}
+
+% --- Graphics & Figures ---
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{subcaption}
+\graphicspath{{../figures/}{./figures/}}
+
+% --- Tables ---
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{longtable}
+\usepackage{multirow}
+
+% --- Mathematics ---
+\usepackage{amsmath, amssymb}
+
+% --- Code Listings ---
+\usepackage{listings}
+\usepackage{xcolor}
+\lstset{
+  basicstyle=\ttfamily\small,
+  showstringspaces=false,
+  breaklines=true,
+  frame=single,
+  numbers=left,
+  numberstyle=\tiny\color{gray},
+  keywordstyle=\color{blue},
+  commentstyle=\color{green!50!black},
+  stringstyle=\color{red!70!black},
+  backgroundcolor=\color{gray!5},
+}
+
+% --- URLs & Hyperlinks ---
+\usepackage[
+  colorlinks=true,
+  linkcolor=black,
+  citecolor=blue,
+  urlcolor=blue,
+  bookmarks=true,
+  pdfauthor={Dimitris Keramidas},
+  pdftitle={Tracking the Lifetime of Malicious Indicators in Public Threat Intelligence Feeds}
+]{hyperref}
+\usepackage{url}
+\expandafter\def\expandafter\UrlBreaks\expandafter{\UrlBreaks\do\-}  % allow long URLs to wrap at hyphens
+
+% --- Bibliography ---
+\usepackage[numbers, sort&compress]{natbib}
+\bibliographystyle{plainnat}
+
+% --- Miscellaneous ---
+\usepackage{enumitem}
+\usepackage{csquotes}
+\usepackage{pdfpages}
+\usepackage[acronym, toc]{glossaries}
+\makeglossaries
+
+\newacronym{tls}{TLS}{Transport Layer Security}
+\newacronym{https}{HTTPS}{Hypertext Transfer Protocol Secure}
+\newacronym{c2}{C2}{command-and-control}
+\newacronym{ioc}{IOC}{indicator of compromise}
+\newacronym{jarm}{JARM}{a TLS server fingerprinting method by Salesforce Engineering}
+\newacronym{dns}{DNS}{Domain Name System}
+\newacronym{ttl}{TTL}{time to live}
+\newacronym{asn}{ASN}{autonomous system number}
+\newacronym{bgp}{BGP}{Border Gateway Protocol}
+\newacronym{ml}{ML}{machine learning}
+\newacronym{gnn}{GNN}{graph neural network}
+\newacronym{api}{API}{application programming interface}
+\newacronym{ip}{IP}{Internet Protocol}
+\newacronym{ipv4}{IPv4}{Internet Protocol version 4}
+\newacronym{ipv6}{IPv6}{Internet Protocol version 6}
+\newacronym{cli}{CLI}{command-line interface}
+\newacronym{csv}{CSV}{comma-separated values}
+\newacronym{rq}{RQ}{research question}
+
+% ============================================================

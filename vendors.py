@@ -103,13 +103,13 @@ async def vt_get_ip_analysis(session: aiohttp.ClientSession, analysis_id: str, a
             if res_status == "unspecified":
                 return response  # Panic return
             if res_status == "queued":
-                info_print(f"{' ' * 60}| VT queued. Waiting for {10 * WAITING_TIME} seconds before retrying...")
+                info_print(f"{' ' * 30}| VT queued. Waiting for {10 * WAITING_TIME} seconds before retrying...")
                 await asyncio.sleep(10 * WAITING_TIME)
             elif res_status == "in-progress":
-                info_print(f"{' ' * 60}| VT in-progress. Waiting for {2 * WAITING_TIME} seconds before retrying...")
+                info_print(f"{' ' * 30}| VT in-progress. Waiting for {2 * WAITING_TIME} seconds before retrying...")
                 await asyncio.sleep(2 * WAITING_TIME)
             else:
-                info_print(f"{' ' * 60}| VT {res_status}. Waiting for {WAITING_TIME} seconds before retrying...")
+                info_print(f"{' ' * 30}| VT {res_status}. Waiting for {WAITING_TIME} seconds before retrying...")
                 await asyncio.sleep(WAITING_TIME)
             async with session.get(
                 f"https://www.virustotal.com/api/v3/analyses/{analysis_id}",

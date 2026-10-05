@@ -34,8 +34,9 @@
   "latex-workshop.latex.clean.method": "command",
   "latex-workshop.latex.clean.fileTypes": [
     "*.aux", "*.bbl", "*.blg", "*.idx", "*.ind", "*.lof", "*.snm", "*.vrb", "*.dvi",
-    "*.lot", "*.out", "*.toc", "*.acn", "*.acr", "*.alg", "*.nav", "*.synctex.gz",
-    "*.glg", "*.glo", "*.gls", "*.fls", "*.log", "*.fdb_latexmk"
+    "*.lot", "*.out", "*.toc", "*.acn", "*.acr", "*.alg", "*.nav",
+    "*.glg", "*.glo", "*.gls", "*.fls", "*.log", "*.fdb_latexmk",
+    "*.ist", "*.xdy", "*.glsdefs"
   ],
   "latex-workshop.latex.autoClean.run": "onSucceeded"
 }

@@ -38,28 +38,30 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["ALL"]
+# Rule CODES, not names: selecting by name requires ruff preview mode, and an
+# unrecognised selector makes `ruff check` abort outright rather than degrade.
 ignore = [
-    "blind-except",
-    "missing-copyright-notice",
-    "missing-type-function-argument",
-    "missing-return-type-undocumented-public-function",
-    "undocumented-public-function",
-    "undocumented-public-module",
-    "incorrect-blank-line-before-class",
-    "multi-line-summary-second-line",
-    "complex-structure",
-    "blank-lines-top-level",
-    "too-many-locals",
-    "too-many-branches",
-    "too-many-statements",
-    "unused-async",
-    "missing-trailing-comma",
-    "print",
-    "glob",
-    "any-type",
-    "too-many-statements-in-try-clause",
-    "too-many-arguments",
-    "too-many-positional-arguments",
+    "BLE001",  # blind-except
+    "CPY001",  # missing-copyright-notice
+    "ANN001",  # missing-type-function-argument
+    "ANN201",  # missing-return-type-undocumented-public-function
+    "D103",    # undocumented-public-function
+    "D100",    # undocumented-public-module
+    "D203",    # incorrect-blank-line-before-class
+    "D213",    # multi-line-summary-second-line
+    "C901",    # complex-structure
+    "E302",    # blank-lines-top-level
+    "PLR0914", # too-many-locals
+    "PLR0912", # too-many-branches
+    "PLR0915", # too-many-statements
+    "RUF029",  # unused-async
+    "COM812",  # missing-trailing-comma
+    "T201",    # print
+    "PTH207",  # glob
+    "ANN401",  # any-type
+    "PLW0717", # too-many-statements-in-try-clause
+    "PLR0913", # too-many-arguments
+    "PLR0917", # too-many-positional-arguments
 ]
 
 # Allow fix for all enabled rules (when `--fix`) is provided.

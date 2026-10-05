@@ -143,10 +143,23 @@ async def gather_results(args: argparse.Namespace) -> tuple[TotalResults, Report
     await queue.join()
 
     all_ret = await asyncio.gather(*workers)
-    total_results: TotalResults = {}
-    [total_results.update(res[0]) for res in all_ret]
-    report_results: ReportResults = {}
-    [report_results.update(res[1]) for res in all_ret]
+    # Merge by EXTENDING the per-identifier lists, never by dict.update(): each worker holds a
+    # partial time series for the same IP:Port:group key, and update() would keep only the last
+    # worker's slice and silently discard the rest.
+    #
+    # Today this is masked -- worker() has no suspension point once the queue is non-empty (an
+    # asyncio Queue.get() on a non-empty queue returns without yielding, and the CSV parse is
+    # synchronous), so in practice a single worker drains everything and no key is ever held by
+    # two workers. That also means -w/--workers currently buys no parallelism. The moment the
+    # read path becomes genuinely async, both facts flip -- and with update() the result would be
+    # one date per IP instead of a full series, with no error raised.
+    total_results: TotalResults = defaultdict(list)
+    report_results: ReportResults = defaultdict(list)
+    for res in all_ret:
+        for identifier, entries in res[0].items():
+            total_results[identifier].extend(entries)
+        for identifier, entries in res[1].items():
+            report_results[identifier].extend(entries)
     not_complete = sum(res[2] for res in all_ret)
     print("Gathered results")
     return total_results, report_results, not_complete
@@ -184,10 +197,7 @@ async def compile_total_results(
         "aggregate": ("Total Malicious Votes Over Time", "Total Malicious Votes"),
         "diff": ("Change in Malicious Votes Over Time", "Change in Malicious Votes"),
         "precentage": ("Percentage of IPs with Malicious Votes Over Time", "IPs with Malicious Votes (%)"),
-        "diff_precentage": (
-            "Percentage Point Change in Malicious Votes Over Time",
-            "Percentage Point Change (%)",
-        ),
+        "diff_precentage": ("Percentage Point Change in Malicious Votes Over Time", "Percentage Point Change (%)"),
     }
 
     for group in ["aggregate", "diff", "precentage", "diff_precentage"]:
@@ -544,7 +554,7 @@ def group_value(args: argparse.Namespace, group: str, key: str) -> Any:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run analysis on ip data.")
     parser.add_argument("-f", "--folder", required=True, help="Input file containing IP data")
-    parser.add_argument("-t", "--top_engines", type=int, default=3, help="Number of top engines to plot.")
+    parser.add_argument("-t", "--top_engines", type=int, default=5, help="Number of top engines to plot.")
     parser.add_argument("-d", "--day_diff", type=int, default=3, help="Days between group scans.")
     parser.add_argument("-w", "--workers", type=int, default=50, help="Number of concurrent worker tasks.")
     parser.add_argument("-q", "--queue_size", type=int, default=50, help="Size of the task queue.")

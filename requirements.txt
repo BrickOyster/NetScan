@@ -1,5 +1,5 @@
 aiohttp
 anyio
 matplotlib
-dotenv
+python-dotenv
 requests
