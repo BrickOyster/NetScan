@@ -1,6 +1,6 @@
 import asyncio
 import socket
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 import aiohttp
@@ -10,9 +10,32 @@ WAITING_TIME = 32
 MALICIOUS_CONFIDENSE_THRESHOLD = 0.25
 SUSPICIOUS_CONFIDENSE_THRESHOLD = 0.15
 VIRUSTOTAL_RESET_TIME = 3
+# Grace period added after the hour boundary before retrying a quota-rejected submit, so a
+# small clock difference against VirusTotal's side cannot land the retry just *before* the
+# reset -- which would be rejected again and cost another full hour. Set to 0 to retry
+# exactly on the hour.
+VIRUSTOTAL_HOURLY_RESET_GRACE = 30
 
 TotalVotes = dict[str, int]
 Report = dict[str, dict[str, Any]]
+
+
+def seconds_until_next_hour() -> float:
+    """Seconds to wait for VirusTotal's hourly quota to refill.
+
+    VirusTotal enforces an hourly quota alongside the daily one, and the hourly allowance
+    refills on the hour. A submit rejected with QuotaExceededError has almost certainly hit
+    the hourly cap, not the daily one -- the daily case is handled separately by
+    runfetch.quota_worker, which cancels every task once the daily allowance is gone.
+
+    Returns:
+        Seconds until the top of the next clock hour, plus
+        VIRUSTOTAL_HOURLY_RESET_GRACE.
+
+    """
+    now = datetime.now().astimezone()
+    next_hour = (now + timedelta(hours=1)).replace(minute=0, second=0, microsecond=0)
+    return (next_hour - now).total_seconds() + VIRUSTOTAL_HOURLY_RESET_GRACE
 
 
 def wait_for_connection() -> bool:
@@ -79,9 +102,15 @@ async def vt_submit_ip_scan(session: aiohttp.ClientSession, search_term: str, ap
             await asyncio.sleep(2 * WAITING_TIME)
             return await vt_submit_ip_scan(session, search_term, apikey)
         if testing.find("QuotaExceededError") != -1:
-            info_print(f"VirusTotal quota exceeded ({search_term})")
-            await asyncio.sleep(4 * WAITING_TIME)
-            return None
+            # Hourly quota: it refills on the hour, so sleep out the rest of this hour and
+            # retry rather than losing the IP's VirusTotal scan. The daily quota is handled
+            # elsewhere (runfetch.quota_worker cancels everything), so this cannot spin.
+            wait = seconds_until_next_hour()
+            info_print(
+                f"VirusTotal quota exceeded ({search_term}); waiting {wait / 60:.1f} min for the hourly quota to reset",
+            )
+            await asyncio.sleep(wait)
+            return await vt_submit_ip_scan(session, search_term, apikey)
         if f"{e}".startswith("Cannot connect to host"):
             info_print("Lost connection")
             wait_for_connection()
@@ -118,6 +147,15 @@ async def vt_get_ip_analysis(session: aiohttp.ClientSession, analysis_id: str, a
                 data = await resp.json()
                 response = data.get("data", data)
             request_num += 1
+            if response.get("error", {}).get("code", "") == "QuotaExceededError":
+                # Polling counts against the same hourly quota as submitting. Sleep out the
+                # hour and poll again instead of dropping an analysis we already paid for.
+                wait = seconds_until_next_hour()
+                info_print(
+                    f"{' ' * 30}| VT quota exceeded ({analysis_id}); waiting {wait / 60:.1f} min for the hourly quota to reset",
+                )
+                await asyncio.sleep(wait)
+                response = {"attributes": {"status": "not_completed"}}
         if request_num > report_after:
             info_print(f"{' ' * 60}| VT tries {request_num} requests.")
     except Exception as e:
