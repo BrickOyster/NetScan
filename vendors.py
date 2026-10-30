@@ -74,8 +74,8 @@ async def check_vt_quota(session: aiohttp.ClientSession, apikey: str) -> dict[st
             }
 
         return {
-            "api_requests_daily": {"user": {"allowed": 500, "used": 501}},
-            "api_requests_hourly": {"user": {"allowed": 500, "used": 501}},
+            "api_requests_daily": {"user": {"allowed": 500, "used": None}},
+            "api_requests_hourly": {"user": {"allowed": 500, "used": None}},
         }
 
 

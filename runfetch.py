@@ -100,15 +100,18 @@ async def quota_worker(args: argparse.Namespace) -> None:
     """Background task to monitor VT quota and cancel all tasks if quota is exceeded."""
     async with aiohttp.ClientSession() as session:
         left_day = 100
-        while left_day != 0:
+        while left_day is None or left_day > 0:
             await asyncio.sleep(10 * WAITING_TIME)
             if time.localtime().tm_hour == VIRUSTOTAL_RESET_TIME:
                 break
             vt_quota = await check_vt_quota(session, key_in_use["VIRUSTOTAL"])
+            # used is None when the quota check itself failed; keep going and retry
             allowed_day = vt_quota["api_requests_daily"]["user"]["allowed"]
-            left_day = allowed_day - vt_quota["api_requests_daily"]["user"]["used"]
+            used_day = vt_quota["api_requests_daily"]["user"]["used"]
+            left_day = None if used_day is None else allowed_day - used_day
             allowed_hour = vt_quota["api_requests_hourly"]["user"]["allowed"]
-            left_hour = allowed_hour - vt_quota["api_requests_hourly"]["user"]["used"]
+            used_hour = vt_quota["api_requests_hourly"]["user"]["used"]
+            left_hour = None if used_hour is None else allowed_hour - used_hour
             if args.debug:
                 info_print(f"VT quota = H: {left_hour}/{allowed_hour} | D:{left_day}/{allowed_day}")
 
