@@ -97,9 +97,13 @@ pp(key_in_use)
 
 
 async def quota_worker(args: argparse.Namespace) -> None:
-    """Background task to monitor VT quota and cancel all tasks if quota is exceeded."""
+    """Background task to monitor VT quota and cancel all tasks if quota is exceeded or stalls."""
+    reason = "quota exceeded"
+    last_change_timeout = 3600
     async with aiohttp.ClientSession() as session:
         left_day = 100
+        last_used_day = None
+        last_change = time.monotonic()
         while left_day is None or left_day > 0:
             await asyncio.sleep(10 * WAITING_TIME)
             if time.localtime().tm_hour == VIRUSTOTAL_RESET_TIME:
@@ -114,13 +118,20 @@ async def quota_worker(args: argparse.Namespace) -> None:
             left_hour = None if used_hour is None else allowed_hour - used_hour
             if args.debug:
                 info_print(f"VT quota = H: {left_hour}/{allowed_hour} | D:{left_day}/{allowed_day}")
+            # failed checks don't count as progress, so an hour of them also stops the run
+            if used_day is not None and used_day != last_used_day:
+                last_used_day = used_day
+                last_change = time.monotonic()
+            elif time.monotonic() - last_change > last_change_timeout:
+                reason = "quota unchanged for over an hour"
+                break
 
-    info_print("VT quota exceeded, cancelling all tasks...")
+    info_print(f"VT {reason}, cancelling all tasks...")
     for task in asyncio.all_tasks():
         if task.get_name() == "quota-worker":
             continue
         info_print(f"Canceling task: {task.get_name()}")
-        task.cancel("quota exceeded error")
+        task.cancel(f"{reason} error")
 
 
 async def producer(
